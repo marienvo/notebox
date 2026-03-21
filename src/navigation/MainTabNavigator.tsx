@@ -24,7 +24,7 @@ const HomeStack = createStackNavigator<HomeStackParamList>();
 const VaultStack = createStackNavigator<VaultStackParamList>();
 const SettingsStack = createStackNavigator<SettingsStackParamList>();
 const inboxTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
-  <MaterialIcons color={color} name="inbox" size={size} />
+  <MaterialIcons color={color} name="move-to-inbox" size={size} />
 );
 const podcastsTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
   <MaterialIcons color={color} name="headphones" size={size} />
@@ -33,7 +33,7 @@ const homeTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) =>
   <MaterialIcons color={color} name="home" size={size} />
 );
 const vaultTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
-  <MaterialIcons color={color} name="book" size={size} />
+  <MaterialIcons color={color} name="library-books" size={size} />
 );
 const settingsTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
   <MaterialIcons color={color} name="settings" size={size} />
