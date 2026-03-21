@@ -2,15 +2,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {NOTES_DIRECTORY_URI_KEY} from './keys';
 
-const isDevMockVaultEnabled = __DEV__ && !('jest' in globalThis);
+const isDevMockVaultEnabled =
+  __DEV__ &&
+  !(globalThis as {process?: {env?: Record<string, string | undefined>}}).process
+    ?.env?.JEST_WORKER_ID;
 
-async function getDevStorage() {
-  return import('../../dev/devStorage');
+function getDevStorage() {
+  return require('../../dev/devStorage') as typeof import('../../dev/devStorage');
 }
 
 export async function getSavedUri(): Promise<string | null> {
   if (isDevMockVaultEnabled) {
-    const devStorage = await getDevStorage();
+    const devStorage = getDevStorage();
     return devStorage.getSavedUri();
   }
 
@@ -19,7 +22,7 @@ export async function getSavedUri(): Promise<string | null> {
 
 export async function saveUri(uri: string): Promise<void> {
   if (isDevMockVaultEnabled) {
-    const devStorage = await getDevStorage();
+    const devStorage = getDevStorage();
     await devStorage.saveUri(uri);
     return;
   }
@@ -35,7 +38,7 @@ export async function saveUri(uri: string): Promise<void> {
 
 export async function clearUri(): Promise<void> {
   if (isDevMockVaultEnabled) {
-    const devStorage = await getDevStorage();
+    const devStorage = getDevStorage();
     return devStorage.clearUri();
   }
 

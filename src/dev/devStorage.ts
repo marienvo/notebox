@@ -8,6 +8,7 @@ const DEV_STORAGE_PREFIX = '@notebox_dev';
 const DEV_SEEDED_KEY = `${DEV_STORAGE_PREFIX}:seeded`;
 const DEV_SETTINGS_KEY = `${DEV_STORAGE_PREFIX}:settings`;
 const DEV_NOTES_INDEX_KEY = `${DEV_STORAGE_PREFIX}:notes:index`;
+const INBOX_DIRECTORY_NAME = 'Inbox';
 const MARKDOWN_EXTENSION = '.md';
 
 type NotesIndex = Record<string, number>;
@@ -70,9 +71,19 @@ function noteUriFromName(noteName: string): string {
   return `${DEV_MOCK_VAULT_URI}/${noteName}`;
 }
 
+function inInboxPath(fileName: string): string {
+  return `${INBOX_DIRECTORY_NAME}/${fileName}`;
+}
+
 function noteNameFromUri(noteUri: string): string {
   const normalizedNoteUri = normalizeNoteUri(noteUri);
-  const noteName = normalizedNoteUri.split('/').pop();
+  const prefix = `${DEV_MOCK_VAULT_URI}/`;
+
+  if (!normalizedNoteUri.startsWith(prefix)) {
+    throw new Error('Invalid note URI.');
+  }
+
+  const noteName = normalizedNoteUri.slice(prefix.length);
 
   if (!noteName) {
     throw new Error('Invalid note URI.');
@@ -112,8 +123,9 @@ async function ensureSeeded(): Promise<void> {
   const notesIndex: NotesIndex = {};
 
   for (const note of MOCK_NOTES) {
-    notesIndex[note.name] = timestamp;
-    await AsyncStorage.setItem(devNoteKey(note.name), note.content);
+    const inboxNoteName = inInboxPath(note.name);
+    notesIndex[inboxNoteName] = timestamp;
+    await AsyncStorage.setItem(devNoteKey(inboxNoteName), note.content);
   }
 
   await writeNotesIndex(notesIndex);
@@ -190,7 +202,11 @@ export async function listNotes(baseUri: string): Promise<NoteSummary[]> {
   const index = await readNotesIndex();
 
   return Object.keys(index)
-    .filter(name => name.endsWith(MARKDOWN_EXTENSION))
+    .filter(
+      name =>
+        name.startsWith(`${INBOX_DIRECTORY_NAME}/`) &&
+        name.endsWith(MARKDOWN_EXTENSION),
+    )
     .map(name => ({
       lastModified: index[name] ?? null,
       name,
@@ -232,11 +248,11 @@ export async function createNote(
 
   const index = await readNotesIndex();
   const baseName = sanitizeFileName(title);
-  let fileName = `${baseName}${MARKDOWN_EXTENSION}`;
+  let fileName = inInboxPath(`${baseName}${MARKDOWN_EXTENSION}`);
   let nextSuffix = 2;
 
-  while (index[fileName]) {
-    fileName = `${baseName}-${nextSuffix}${MARKDOWN_EXTENSION}`;
+  while (Object.prototype.hasOwnProperty.call(index, fileName)) {
+    fileName = inInboxPath(`${baseName}-${nextSuffix}${MARKDOWN_EXTENSION}`);
     nextSuffix += 1;
   }
 
@@ -260,7 +276,7 @@ export async function writeNoteContent(
   const fileName = noteNameFromUri(noteUri);
   const index = await readNotesIndex();
 
-  if (!index[fileName]) {
+  if (!Object.prototype.hasOwnProperty.call(index, fileName)) {
     throw new Error('Note was not found in dev mock vault.');
   }
 

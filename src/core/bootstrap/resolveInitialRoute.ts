@@ -4,7 +4,10 @@ import {hasPermission} from 'react-native-saf-x';
 import {clearUri, getSavedUri} from '../storage/appStorage';
 
 export type InitialRoute = 'MainTabs' | 'Setup';
-const isDevMockVaultEnabled = __DEV__ && !('jest' in globalThis);
+const isDevMockVaultEnabled =
+  __DEV__ &&
+  !(globalThis as {process?: {env?: Record<string, string | undefined>}}).process
+    ?.env?.JEST_WORKER_ID;
 
 export async function resolveInitialRoute(): Promise<InitialRoute> {
   if (isDevMockVaultEnabled) {

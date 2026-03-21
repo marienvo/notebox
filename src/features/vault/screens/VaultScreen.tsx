@@ -32,6 +32,10 @@ export function VaultScreen({navigation}: VaultScreenProps) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Vault</Text>
+      <View style={styles.folderRow}>
+        <Text style={styles.folderLabel}>Folder</Text>
+        <Text style={styles.folderValue}>Inbox</Text>
+      </View>
       {isLoading && notes.length === 0 ? (
         <ActivityIndicator style={styles.spinner} />
       ) : null}
@@ -56,7 +60,7 @@ export function VaultScreen({navigation}: VaultScreenProps) {
         ListEmptyComponent={
           !isLoading ? (
             <Text style={styles.status}>
-              No markdown notes found. Add one from Inbox.
+              No markdown notes found in Inbox. Add one from the Inbox tab.
             </Text>
           ) : null
         }
@@ -70,6 +74,26 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
     paddingTop: 16,
+  },
+  folderLabel: {
+    color: '#616161',
+    fontSize: 12,
+    textTransform: 'uppercase',
+  },
+  folderRow: {
+    alignItems: 'center',
+    borderColor: '#d6d6d6',
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  folderValue: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   listContent: {
     paddingBottom: 20,

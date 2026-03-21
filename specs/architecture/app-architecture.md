@@ -37,12 +37,15 @@ SetupScreen
 InboxScreen
   -> capture title + content
   -> create .md note through core/storage
-  -> note appears in Vault on refresh
+  -> create note in selected directory's /Inbox folder
+  -> auto-create /Inbox when missing
+  -> note appears in Vault (Inbox folder view) on refresh
 ```
 
 ```text
 VaultScreen
-  -> list markdown files in selected SAF directory
+  -> show one folder context (hardcoded: Inbox)
+  -> list markdown files in selected SAF directory's /Inbox folder
   -> open NoteDetailScreen to render markdown
 ```
 
@@ -100,7 +103,7 @@ src/
 
 - The selected Notes directory is user-owned external/shared storage.
 - App-owned settings live in `/.notebox/settings.json` under that directory.
-- Notes are `.md` files in the selected directory and are the source of truth.
+- Notes are `.md` files in the selected directory's `/Inbox` folder and are the source of truth.
 - App sandbox storage (AsyncStorage) stores only `notesDirectoryUri`.
 
 This matches your requirement: after setup, app settings/state live inside the selected Notes directory dot folder whenever possible.

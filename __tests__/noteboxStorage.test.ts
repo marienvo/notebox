@@ -90,17 +90,37 @@ describe('noteboxStorage', () => {
   });
 
   test('listNotes returns markdown files sorted by lastModified', async () => {
+    existsMock.mockResolvedValueOnce(true);
     listFilesMock.mockResolvedValueOnce([
-      {lastModified: 11, name: 'older.md', type: 'file', uri: `${baseUri}/older.md`},
-      {lastModified: 22, name: 'newer.md', type: 'file', uri: `${baseUri}/newer.md`},
-      {name: 'settings.json', type: 'file', uri: `${baseUri}/settings.json`},
-      {name: '.notebox', type: 'directory', uri: `${baseUri}/.notebox`},
+      {
+        lastModified: 11,
+        name: 'older.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/older.md`,
+      },
+      {
+        lastModified: 22,
+        name: 'newer.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/newer.md`,
+      },
+      {name: 'settings.json', type: 'file', uri: `${baseUri}/Inbox/settings.json`},
+      {name: '.notebox', type: 'directory', uri: `${baseUri}/Inbox/.notebox`},
     ] as never);
 
     await expect(listNotes(baseUri)).resolves.toEqual([
-      {lastModified: 22, name: 'newer.md', uri: `${baseUri}/newer.md`},
-      {lastModified: 11, name: 'older.md', uri: `${baseUri}/older.md`},
+      {lastModified: 22, name: 'newer.md', uri: `${baseUri}/Inbox/newer.md`},
+      {lastModified: 11, name: 'older.md', uri: `${baseUri}/Inbox/older.md`},
     ]);
+    expect(existsMock).toHaveBeenCalledWith(`${baseUri}/Inbox`);
+    expect(listFilesMock).toHaveBeenCalledWith(`${baseUri}/Inbox`);
+  });
+
+  test('listNotes returns empty list when Inbox directory does not exist', async () => {
+    existsMock.mockResolvedValueOnce(false);
+
+    await expect(listNotes(baseUri)).resolves.toEqual([]);
+    expect(listFilesMock).not.toHaveBeenCalled();
   });
 
   test('readNote reads markdown content by URI', async () => {
@@ -117,14 +137,20 @@ describe('noteboxStorage', () => {
   });
 
   test('createNote sanitizes title and writes markdown content', async () => {
+    existsMock.mockResolvedValueOnce(false);
     await expect(createNote(baseUri, ' Team Ideas! ', 'first line')).resolves.toMatchObject({
       name: 'team-ideas.md',
-      uri: `${baseUri}/team-ideas.md`,
+      uri: `${baseUri}/Inbox/team-ideas.md`,
     });
-    expect(writeFileMock).toHaveBeenCalledWith(`${baseUri}/team-ideas.md`, 'first line\n', {
-      encoding: 'utf8',
-      mimeType: 'text/markdown',
-    });
+    expect(mkdirMock).toHaveBeenCalledWith(`${baseUri}/Inbox`);
+    expect(writeFileMock).toHaveBeenCalledWith(
+      `${baseUri}/Inbox/team-ideas.md`,
+      'first line\n',
+      {
+        encoding: 'utf8',
+        mimeType: 'text/markdown',
+      },
+    );
   });
 
   test('writeNoteContent writes markdown content by URI', async () => {

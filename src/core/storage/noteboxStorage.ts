@@ -9,16 +9,20 @@ import {
 import {NoteDetail, NoteSummary, NoteboxSettings} from '../../types';
 
 const NOTEBOX_DIRECTORY_NAME = '.notebox';
+const INBOX_DIRECTORY_NAME = 'Inbox';
 const SETTINGS_FILE_NAME = 'settings.json';
 const MARKDOWN_EXTENSION = '.md';
 
 const defaultSettings: NoteboxSettings = {
   displayName: 'My Notebox',
 };
-const isDevMockVaultEnabled = __DEV__ && !('jest' in globalThis);
+const isDevMockVaultEnabled =
+  __DEV__ &&
+  !(globalThis as {process?: {env?: Record<string, string | undefined>}}).process
+    ?.env?.JEST_WORKER_ID;
 
-async function getDevStorage() {
-  return import('../../dev/devStorage');
+function getDevStorage() {
+  return require('../../dev/devStorage') as typeof import('../../dev/devStorage');
 }
 
 function getNoteboxDirectoryUri(baseUri: string): string {
@@ -27,6 +31,10 @@ function getNoteboxDirectoryUri(baseUri: string): string {
 
 function getSettingsUri(baseUri: string): string {
   return `${getNoteboxDirectoryUri(baseUri)}/${SETTINGS_FILE_NAME}`;
+}
+
+function getInboxDirectoryUri(baseUri: string): string {
+  return `${baseUri}/${INBOX_DIRECTORY_NAME}`;
 }
 
 function normalizeBaseUri(baseUri: string): string {
@@ -96,7 +104,7 @@ function parseSettings(rawSettings: string): NoteboxSettings {
 
 export async function initNotebox(baseUri: string): Promise<void> {
   if (isDevMockVaultEnabled) {
-    const devStorage = await getDevStorage();
+    const devStorage = getDevStorage();
     await devStorage.initNotebox(baseUri);
     return;
   }
@@ -119,7 +127,7 @@ export async function initNotebox(baseUri: string): Promise<void> {
 
 export async function readSettings(baseUri: string): Promise<NoteboxSettings> {
   if (isDevMockVaultEnabled) {
-    const devStorage = await getDevStorage();
+    const devStorage = getDevStorage();
     return devStorage.readSettings(baseUri);
   }
 
@@ -135,7 +143,7 @@ export async function writeSettings(
   settings: NoteboxSettings,
 ): Promise<void> {
   if (isDevMockVaultEnabled) {
-    const devStorage = await getDevStorage();
+    const devStorage = getDevStorage();
     await devStorage.writeSettings(baseUri, settings);
     return;
   }
@@ -151,12 +159,18 @@ export async function writeSettings(
 
 export async function listNotes(baseUri: string): Promise<NoteSummary[]> {
   if (isDevMockVaultEnabled) {
-    const devStorage = await getDevStorage();
+    const devStorage = getDevStorage();
     return devStorage.listNotes(baseUri);
   }
 
   const normalizedBaseUri = normalizeBaseUri(baseUri);
-  const documents = (await listFiles(normalizedBaseUri)) as SafDocumentFile[];
+  const inboxDirectoryUri = getInboxDirectoryUri(normalizedBaseUri);
+
+  if (!(await exists(inboxDirectoryUri))) {
+    return [];
+  }
+
+  const documents = (await listFiles(inboxDirectoryUri)) as SafDocumentFile[];
 
   return documents
     .filter(document => {
@@ -182,7 +196,7 @@ export async function listNotes(baseUri: string): Promise<NoteSummary[]> {
 
 export async function readNote(noteUri: string): Promise<NoteDetail> {
   if (isDevMockVaultEnabled) {
-    const devStorage = await getDevStorage();
+    const devStorage = getDevStorage();
     return devStorage.readNote(noteUri);
   }
 
@@ -205,13 +219,19 @@ export async function createNote(
   content: string,
 ): Promise<NoteSummary> {
   if (isDevMockVaultEnabled) {
-    const devStorage = await getDevStorage();
+    const devStorage = getDevStorage();
     return devStorage.createNote(baseUri, title, content);
   }
 
   const normalizedBaseUri = normalizeBaseUri(baseUri);
+  const inboxDirectoryUri = getInboxDirectoryUri(normalizedBaseUri);
+
+  if (!(await exists(inboxDirectoryUri))) {
+    await mkdir(inboxDirectoryUri);
+  }
+
   const fileName = `${sanitizeFileName(title)}${MARKDOWN_EXTENSION}`;
-  const noteUri = `${normalizedBaseUri}/${fileName}`;
+  const noteUri = `${inboxDirectoryUri}/${fileName}`;
   const trimmedContent = content.trim();
   const noteBody = trimmedContent ? `${trimmedContent}\n` : '';
 
@@ -232,7 +252,7 @@ export async function writeNoteContent(
   content: string,
 ): Promise<void> {
   if (isDevMockVaultEnabled) {
-    const devStorage = await getDevStorage();
+    const devStorage = getDevStorage();
     await devStorage.writeNoteContent(noteUri, content);
     return;
   }
