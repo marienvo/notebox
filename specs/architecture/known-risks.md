@@ -8,7 +8,7 @@ Risk:
 
 Mitigation:
 
-- Start with `newArchEnabled=false`.
+- `newArchEnabled=false` is explicitly enforced in `android/gradle.properties`.
 - Validate on real device early (before polishing UI).
 - Keep fallback option: test maintained fork if primary package blocks progress.
 - Before RN upgrades or new native module adoption, explicitly validate New Architecture support on a real Android device.
