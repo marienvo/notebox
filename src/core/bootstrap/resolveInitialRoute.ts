@@ -3,7 +3,7 @@ import {hasPermission} from 'react-native-saf-x';
 
 import {clearUri, getSavedUri} from '../storage/appStorage';
 
-export type InitialRoute = 'Home' | 'Setup';
+export type InitialRoute = 'MainTabs' | 'Setup';
 
 export async function resolveInitialRoute(): Promise<InitialRoute> {
   const savedUri = await getSavedUri();
@@ -12,9 +12,8 @@ export async function resolveInitialRoute(): Promise<InitialRoute> {
     return 'Setup';
   }
 
-  // SAF permissions are Android-only in this MVP.
   if (Platform.OS !== 'android') {
-    return 'Home';
+    return 'MainTabs';
   }
 
   const permissionGranted = await hasPermission(savedUri);
@@ -24,5 +23,5 @@ export async function resolveInitialRoute(): Promise<InitialRoute> {
     return 'Setup';
   }
 
-  return 'Home';
+  return 'MainTabs';
 }

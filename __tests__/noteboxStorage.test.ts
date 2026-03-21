@@ -4,19 +4,25 @@
 
 import {
   exists,
+  listFiles,
   mkdir,
   readFile,
   writeFile,
 } from 'react-native-saf-x';
 
 import {
+  createNote,
+  listNotes,
+  readNote,
   initNotebox,
   readSettings,
+  writeNoteContent,
   writeSettings,
-} from '../src/storage/noteboxStorage';
+} from '../src/core/storage/noteboxStorage';
 
 jest.mock('react-native-saf-x', () => ({
   exists: jest.fn(),
+  listFiles: jest.fn(),
   mkdir: jest.fn(),
   readFile: jest.fn(),
   writeFile: jest.fn(),
@@ -24,6 +30,7 @@ jest.mock('react-native-saf-x', () => ({
 
 describe('noteboxStorage', () => {
   const existsMock = exists as jest.MockedFunction<typeof exists>;
+  const listFilesMock = listFiles as jest.MockedFunction<typeof listFiles>;
   const mkdirMock = mkdir as jest.MockedFunction<typeof mkdir>;
   const readFileMock = readFile as jest.MockedFunction<typeof readFile>;
   const writeFileMock = writeFile as jest.MockedFunction<typeof writeFile>;
@@ -80,5 +87,52 @@ describe('noteboxStorage', () => {
       '{\n  "displayName": "Notebook B"\n}\n',
       {encoding: 'utf8', mimeType: 'application/json'},
     );
+  });
+
+  test('listNotes returns markdown files sorted by lastModified', async () => {
+    listFilesMock.mockResolvedValueOnce([
+      {lastModified: 11, name: 'older.md', type: 'file', uri: `${baseUri}/older.md`},
+      {lastModified: 22, name: 'newer.md', type: 'file', uri: `${baseUri}/newer.md`},
+      {name: 'settings.json', type: 'file', uri: `${baseUri}/settings.json`},
+      {name: '.notebox', type: 'directory', uri: `${baseUri}/.notebox`},
+    ] as never);
+
+    await expect(listNotes(baseUri)).resolves.toEqual([
+      {lastModified: 22, name: 'newer.md', uri: `${baseUri}/newer.md`},
+      {lastModified: 11, name: 'older.md', uri: `${baseUri}/older.md`},
+    ]);
+  });
+
+  test('readNote reads markdown content by URI', async () => {
+    readFileMock.mockResolvedValueOnce('# Hello');
+
+    await expect(readNote(`${baseUri}/hello.md`)).resolves.toEqual({
+      content: '# Hello',
+      summary: {
+        lastModified: null,
+        name: 'hello.md',
+        uri: `${baseUri}/hello.md`,
+      },
+    });
+  });
+
+  test('createNote sanitizes title and writes markdown content', async () => {
+    await expect(createNote(baseUri, ' Team Ideas! ', 'first line')).resolves.toMatchObject({
+      name: 'team-ideas.md',
+      uri: `${baseUri}/team-ideas.md`,
+    });
+    expect(writeFileMock).toHaveBeenCalledWith(`${baseUri}/team-ideas.md`, 'first line\n', {
+      encoding: 'utf8',
+      mimeType: 'text/markdown',
+    });
+  });
+
+  test('writeNoteContent writes markdown content by URI', async () => {
+    await writeNoteContent(`${baseUri}/test.md`, 'updated');
+
+    expect(writeFileMock).toHaveBeenCalledWith(`${baseUri}/test.md`, 'updated\n', {
+      encoding: 'utf8',
+      mimeType: 'text/markdown',
+    });
   });
 });

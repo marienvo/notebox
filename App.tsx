@@ -2,8 +2,6 @@
  * @format
  */
 
-import {NavigationContainer} from '@react-navigation/native';
-import {createStackNavigator} from '@react-navigation/stack';
 import {useEffect, useState} from 'react';
 import {
   ActivityIndicator,
@@ -15,15 +13,13 @@ import {
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 
-import {resolveInitialRoute} from './src/bootstrap/resolveInitialRoute';
+import {resolveInitialRoute} from './src/core/bootstrap/resolveInitialRoute';
+import {VaultProvider} from './src/core/vault/VaultContext';
+import {RootNavigator} from './src/navigation/RootNavigator';
 import {RootStackParamList} from './src/navigation/types';
-import {HomeScreen} from './src/screens/HomeScreen';
-import {SetupScreen} from './src/screens/SetupScreen';
-import {clearUri} from './src/storage/appStorage';
+import {clearUri} from './src/core/storage/appStorage';
 
 type InitialRoute = keyof RootStackParamList;
-
-const Stack = createStackNavigator<RootStackParamList>();
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -62,12 +58,9 @@ function App() {
             <ActivityIndicator size="large" />
           </View>
         ) : (
-          <NavigationContainer>
-            <Stack.Navigator initialRouteName={initialRoute}>
-              <Stack.Screen component={SetupScreen} name="Setup" />
-              <Stack.Screen component={HomeScreen} name="Home" />
-            </Stack.Navigator>
-          </NavigationContainer>
+          <VaultProvider>
+            <RootNavigator initialRouteName={initialRoute} />
+          </VaultProvider>
         )}
       </SafeAreaProvider>
     </GestureHandlerRootView>

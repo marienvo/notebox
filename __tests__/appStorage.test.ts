@@ -4,8 +4,8 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import {clearUri, getSavedUri, saveUri} from '../src/storage/appStorage';
-import {NOTES_DIRECTORY_URI_KEY} from '../src/storage/keys';
+import {clearUri, getSavedUri, saveUri} from '../src/core/storage/appStorage';
+import {NOTES_DIRECTORY_URI_KEY} from '../src/core/storage/keys';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(),

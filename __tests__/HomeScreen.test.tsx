@@ -6,76 +6,55 @@ import {useNavigation} from '@react-navigation/native';
 import {
   act,
   create,
-  ReactTestInstance,
   ReactTestRenderer,
 } from 'react-test-renderer';
 import {Button, TextInput} from 'react-native';
 
-import {HomeScreen} from '../src/screens/HomeScreen';
-import {clearUri, getSavedUri} from '../src/storage/appStorage';
-import {
-  initNotebox,
-  readSettings,
-  writeSettings,
-} from '../src/storage/noteboxStorage';
+import {SettingsScreen} from '../src/features/settings/screens/SettingsScreen';
+import {useSettings} from '../src/features/settings/hooks/useSettings';
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: jest.fn(),
 }));
 
-jest.mock('../src/storage/appStorage', () => ({
-  clearUri: jest.fn(),
-  getSavedUri: jest.fn(),
+jest.mock('../src/features/settings/hooks/useSettings', () => ({
+  useSettings: jest.fn(),
 }));
 
-jest.mock('../src/storage/noteboxStorage', () => ({
-  initNotebox: jest.fn(),
-  readSettings: jest.fn(),
-  writeSettings: jest.fn(),
-}));
-
-describe('HomeScreen', () => {
+describe('SettingsScreen', () => {
   const navigateMock = jest.fn();
   const useNavigationMock = useNavigation as jest.MockedFunction<
     typeof useNavigation
   >;
-  const getSavedUriMock = getSavedUri as jest.MockedFunction<typeof getSavedUri>;
-  const clearUriMock = clearUri as jest.MockedFunction<typeof clearUri>;
-  const initNoteboxMock = initNotebox as jest.MockedFunction<typeof initNotebox>;
-  const readSettingsMock = readSettings as jest.MockedFunction<
-    typeof readSettings
-  >;
-  const writeSettingsMock = writeSettings as jest.MockedFunction<
-    typeof writeSettings
-  >;
+  const useSettingsMock = useSettings as jest.MockedFunction<typeof useSettings>;
+  const saveSettingsMock = jest.fn();
+  const clearDirectoryMock = jest.fn();
 
-  function getButtonByTitle(
-    tree: ReactTestRenderer,
-    title: string,
-  ): ReactTestInstance {
+  function getButtonByTitle(tree: ReactTestRenderer, title: string) {
     return tree.root.findAllByType(Button).find(button => button.props.title === title)!;
   }
 
   beforeEach(() => {
     jest.clearAllMocks();
     useNavigationMock.mockReturnValue({navigate: navigateMock} as never);
-    getSavedUriMock.mockResolvedValue('content://notes');
-    initNoteboxMock.mockResolvedValue();
-    readSettingsMock.mockResolvedValue({displayName: 'My Notebox'});
-    writeSettingsMock.mockResolvedValue();
-    clearUriMock.mockResolvedValue();
+    saveSettingsMock.mockResolvedValue(undefined);
+    clearDirectoryMock.mockResolvedValue(undefined);
+    useSettingsMock.mockReturnValue({
+      baseUri: 'content://notes',
+      clearDirectory: clearDirectoryMock,
+      isSaving: false,
+      saveSettings: saveSettingsMock,
+      settings: {displayName: 'My Notebox'},
+    });
   });
 
-  test('loads URI and settings on mount', async () => {
+  test('loads current display name from settings hook', async () => {
     let tree: ReactTestRenderer;
 
     await act(async () => {
-      tree = create(<HomeScreen />);
+      tree = create(<SettingsScreen />);
     });
 
-    expect(getSavedUriMock).toHaveBeenCalled();
-    expect(initNoteboxMock).toHaveBeenCalledWith('content://notes');
-    expect(readSettingsMock).toHaveBeenCalledWith('content://notes');
     const input = tree!.root.findByType(TextInput);
     expect(input.props.value).toBe('My Notebox');
   });
@@ -84,7 +63,7 @@ describe('HomeScreen', () => {
     let tree: ReactTestRenderer;
 
     await act(async () => {
-      tree = create(<HomeScreen />);
+      tree = create(<SettingsScreen />);
     });
 
     const input = tree!.root.findByType(TextInput);
@@ -97,7 +76,7 @@ describe('HomeScreen', () => {
       await saveButton.props.onPress();
     });
 
-    expect(writeSettingsMock).toHaveBeenCalledWith('content://notes', {
+    expect(saveSettingsMock).toHaveBeenCalledWith({
       displayName: 'Team Notes',
     });
   });
@@ -106,7 +85,7 @@ describe('HomeScreen', () => {
     let tree: ReactTestRenderer;
 
     await act(async () => {
-      tree = create(<HomeScreen />);
+      tree = create(<SettingsScreen />);
     });
 
     const changeDirectoryButton = getButtonByTitle(tree!, 'Change directory');
@@ -114,7 +93,7 @@ describe('HomeScreen', () => {
       await changeDirectoryButton.props.onPress();
     });
 
-    expect(clearUriMock).toHaveBeenCalled();
+    expect(clearDirectoryMock).toHaveBeenCalled();
     expect(navigateMock).toHaveBeenCalledWith('Setup');
   });
 });

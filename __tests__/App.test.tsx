@@ -6,8 +6,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Platform} from 'react-native';
 import {hasPermission} from 'react-native-saf-x';
 
-import {resolveInitialRoute} from '../src/bootstrap/resolveInitialRoute';
-import {NOTES_DIRECTORY_URI_KEY} from '../src/storage/keys';
+import {resolveInitialRoute} from '../src/core/bootstrap/resolveInitialRoute';
+import {NOTES_DIRECTORY_URI_KEY} from '../src/core/storage/keys';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(),
@@ -51,11 +51,11 @@ describe('resolveInitialRoute', () => {
     expect(hasPermissionMock).not.toHaveBeenCalled();
   });
 
-  test('returns Home when URI exists and permission is valid', async () => {
+  test('returns MainTabs when URI exists and permission is valid', async () => {
     asyncStorageMock.getItem.mockResolvedValueOnce('content://test-uri');
     hasPermissionMock.mockResolvedValueOnce(true);
 
-    await expect(resolveInitialRoute()).resolves.toBe('Home');
+    await expect(resolveInitialRoute()).resolves.toBe('MainTabs');
     expect(hasPermissionMock).toHaveBeenCalledWith('content://test-uri');
     expect(asyncStorageMock.removeItem).not.toHaveBeenCalled();
   });
