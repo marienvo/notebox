@@ -1,0 +1,10 @@
+---
+description: Prefer TypeScript, Python, and Go for implementation
+alwaysApply: true
+---
+
+# Preferred Languages
+
+- Prefer TypeScript, Python, and Go for new implementation work unless constraints require otherwise.
+- For React Native code, default to TypeScript as the primary language.
+- Keep language choices consistent within each module to reduce maintenance overhead.
