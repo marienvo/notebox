@@ -4,7 +4,7 @@
 
 Risk:
 
-- `react-native-saf-x` is a Paper (old-arch) module. `newArchEnabled=false` in `gradle.properties` is silently ignored since RN 0.82, so New Architecture is always active in this project (RN 0.84).
+- `react-native-saf-x` is a Paper (old-arch) module. Since RN 0.82, `newArchEnabled` in `gradle.properties` is ignored and New Architecture is always active in this project (RN 0.84). The obsolete property was removed to avoid misleading configuration.
 - However, RN 0.84's interop layer has allowed `react-native-saf-x` to load successfully so far (no `TurboModuleInteropUtils$ParsingException` observed for it). This should be validated before relying on it in production.
 
 Mitigation:
