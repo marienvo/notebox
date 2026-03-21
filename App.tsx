@@ -2,7 +2,6 @@
  * @format
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {NavigationContainer} from '@react-navigation/native';
 import {createStackNavigator} from '@react-navigation/stack';
 import {useEffect, useState} from 'react';
@@ -17,14 +16,10 @@ import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 
 import {resolveInitialRoute} from './src/bootstrap/resolveInitialRoute';
+import {RootStackParamList} from './src/navigation/types';
 import {HomeScreen} from './src/screens/HomeScreen';
 import {SetupScreen} from './src/screens/SetupScreen';
-import {NOTES_DIRECTORY_URI_KEY} from './src/storage/keys';
-
-type RootStackParamList = {
-  Home: undefined;
-  Setup: undefined;
-};
+import {clearUri} from './src/storage/appStorage';
 
 type InitialRoute = keyof RootStackParamList;
 
@@ -44,7 +39,7 @@ function App() {
           setInitialRoute(route);
         }
       } catch {
-        await AsyncStorage.removeItem(NOTES_DIRECTORY_URI_KEY);
+        await clearUri();
         if (isActive) {
           setInitialRoute('Setup');
         }
