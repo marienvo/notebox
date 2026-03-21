@@ -13,6 +13,7 @@ import {openDocumentTree} from 'react-native-saf-x';
 
 import {RootStackParamList} from '../navigation/types';
 import {saveUri} from '../storage/appStorage';
+import {initNotebox} from '../storage/noteboxStorage';
 
 type SetupNavigation = StackNavigationProp<RootStackParamList, 'Setup'>;
 
@@ -40,6 +41,7 @@ export function SetupScreen() {
       }
 
       await saveUri(selectedDirectory.uri);
+      await initNotebox(selectedDirectory.uri);
       navigation.navigate('Home');
     } catch (error) {
       const fallbackMessage =
