@@ -1,0 +1,9 @@
+* text=auto eol=lf
+
+# Windows scripts keep CRLF line endings.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Keep generated Gradle wrapper batch file as-is to avoid noisy re-normalization.
+android/gradlew.bat -text
