@@ -1,6 +1,4 @@
-# Notebox MVP: Risks, Open Questions, Definition of Done
-
-## Risks / uncertainty areas
+# Notebox: Known Risks and Mitigations
 
 ## 1) SAF library compatibility with latest RN defaults (High)
 
@@ -58,24 +56,3 @@ Mitigation:
 
 - Mention hidden-folder behavior in README.
 - Rely on in-app read/write confirmation as ground truth.
-
-## Open questions
-
-1. Confirm exact dot folder name: `.notebox` (assumed final).
-2. Confirm demo setting key/value:
-   - proposed key: `displayName`
-   - default value: `"My Notebox"`
-3. Confirm target minimum Android API (plan assumes modern Android + scoped storage behavior, typically API 30+ target).
-
-## Definition of done
-
-- [ ] Fresh install opens setup screen.
-- [ ] User can select existing Notes directory using Android picker.
-- [ ] App persists selected directory URI in AsyncStorage.
-- [ ] App creates `/.notebox/settings.json` in selected directory.
-- [ ] Home screen reads and displays `displayName` from settings.
-- [ ] Editing and saving `displayName` updates `settings.json`.
-- [ ] After force-close/relaunch, app reuses saved directory and displays persisted setting.
-- [ ] If permission is invalid/revoked, app routes back to setup safely.
-- [ ] `npm run apk` builds and installs a debug APK on connected Android device.
-- [ ] README includes exact prerequisites and commands for build/install and first-run verification.
