@@ -15,6 +15,11 @@ const MARKDOWN_EXTENSION = '.md';
 const defaultSettings: NoteboxSettings = {
   displayName: 'My Notebox',
 };
+const isDevMockVaultEnabled = __DEV__ && !('jest' in globalThis);
+
+async function getDevStorage() {
+  return import('../../dev/devStorage');
+}
 
 function getNoteboxDirectoryUri(baseUri: string): string {
   return `${baseUri}/${NOTEBOX_DIRECTORY_NAME}`;
@@ -90,6 +95,12 @@ function parseSettings(rawSettings: string): NoteboxSettings {
 }
 
 export async function initNotebox(baseUri: string): Promise<void> {
+  if (isDevMockVaultEnabled) {
+    const devStorage = await getDevStorage();
+    await devStorage.initNotebox(baseUri);
+    return;
+  }
+
   const normalizedBaseUri = normalizeBaseUri(baseUri);
   const noteboxDirectoryUri = getNoteboxDirectoryUri(normalizedBaseUri);
   const settingsUri = getSettingsUri(normalizedBaseUri);
@@ -107,6 +118,11 @@ export async function initNotebox(baseUri: string): Promise<void> {
 }
 
 export async function readSettings(baseUri: string): Promise<NoteboxSettings> {
+  if (isDevMockVaultEnabled) {
+    const devStorage = await getDevStorage();
+    return devStorage.readSettings(baseUri);
+  }
+
   const normalizedBaseUri = normalizeBaseUri(baseUri);
   const settingsUri = getSettingsUri(normalizedBaseUri);
   const rawSettings = await readFile(settingsUri, {encoding: 'utf8'});
@@ -118,6 +134,12 @@ export async function writeSettings(
   baseUri: string,
   settings: NoteboxSettings,
 ): Promise<void> {
+  if (isDevMockVaultEnabled) {
+    const devStorage = await getDevStorage();
+    await devStorage.writeSettings(baseUri, settings);
+    return;
+  }
+
   const normalizedBaseUri = normalizeBaseUri(baseUri);
   const settingsUri = getSettingsUri(normalizedBaseUri);
 
@@ -128,6 +150,11 @@ export async function writeSettings(
 }
 
 export async function listNotes(baseUri: string): Promise<NoteSummary[]> {
+  if (isDevMockVaultEnabled) {
+    const devStorage = await getDevStorage();
+    return devStorage.listNotes(baseUri);
+  }
+
   const normalizedBaseUri = normalizeBaseUri(baseUri);
   const documents = (await listFiles(normalizedBaseUri)) as SafDocumentFile[];
 
@@ -154,6 +181,11 @@ export async function listNotes(baseUri: string): Promise<NoteSummary[]> {
 }
 
 export async function readNote(noteUri: string): Promise<NoteDetail> {
+  if (isDevMockVaultEnabled) {
+    const devStorage = await getDevStorage();
+    return devStorage.readNote(noteUri);
+  }
+
   const normalizedNoteUri = normalizeNoteUri(noteUri);
   const content = await readFile(normalizedNoteUri, {encoding: 'utf8'});
 
@@ -172,6 +204,11 @@ export async function createNote(
   title: string,
   content: string,
 ): Promise<NoteSummary> {
+  if (isDevMockVaultEnabled) {
+    const devStorage = await getDevStorage();
+    return devStorage.createNote(baseUri, title, content);
+  }
+
   const normalizedBaseUri = normalizeBaseUri(baseUri);
   const fileName = `${sanitizeFileName(title)}${MARKDOWN_EXTENSION}`;
   const noteUri = `${normalizedBaseUri}/${fileName}`;
@@ -194,6 +231,12 @@ export async function writeNoteContent(
   noteUri: string,
   content: string,
 ): Promise<void> {
+  if (isDevMockVaultEnabled) {
+    const devStorage = await getDevStorage();
+    await devStorage.writeNoteContent(noteUri, content);
+    return;
+  }
+
   const normalizedNoteUri = normalizeNoteUri(noteUri);
   const noteBody = `${content}\n`;
 
