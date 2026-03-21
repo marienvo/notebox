@@ -3,7 +3,12 @@
  */
 
 import {useNavigation} from '@react-navigation/native';
-import {act, create, ReactTestRenderer} from 'react-test-renderer';
+import {
+  act,
+  create,
+  ReactTestInstance,
+  ReactTestRenderer,
+} from 'react-test-renderer';
 import {Button, TextInput} from 'react-native';
 
 import {HomeScreen} from '../src/screens/HomeScreen';
@@ -47,7 +52,7 @@ describe('HomeScreen', () => {
   function getButtonByTitle(
     tree: ReactTestRenderer,
     title: string,
-  ): ReactTestRenderer['root']['findAllByType'][number] {
+  ): ReactTestInstance {
     return tree.root.findAllByType(Button).find(button => button.props.title === title)!;
   }
 
