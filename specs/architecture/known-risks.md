@@ -1,17 +1,17 @@
 # Notebox: Known Risks and Mitigations
 
-## 1) SAF library compatibility with latest RN defaults (High)
+## 1) SAF library compatibility with New Architecture (High)
 
 Risk:
 
-- `react-native-saf-x` may have compatibility issues depending on RN version and new architecture defaults.
+- `react-native-saf-x` is a Paper (old-arch) module. `newArchEnabled=false` in `gradle.properties` is silently ignored since RN 0.82, so New Architecture is always active in this project (RN 0.84).
+- However, RN 0.84's interop layer has allowed `react-native-saf-x` to load successfully so far (no `TurboModuleInteropUtils$ParsingException` observed for it). This should be validated before relying on it in production.
 
 Mitigation:
 
-- `newArchEnabled=false` is explicitly enforced in `android/gradle.properties`.
-- Validate on real device early (before polishing UI).
-- Keep fallback option: test maintained fork if primary package blocks progress.
-- Before RN upgrades or new native module adoption, explicitly validate New Architecture support on a real Android device.
+- Validate SAF read/write on a real device before shipping.
+- If `react-native-saf-x` fails under the interop layer in a future RN upgrade, evaluate a fork or replacement (e.g., `expo-file-system` with bare workflow, or a custom native module).
+- Before any RN version bump, explicitly test file-picker and read/write flows on a physical Android device.
 
 ## 2) URI handling assumptions (High)
 
@@ -58,13 +58,21 @@ Mitigation:
 - Mention hidden-folder behavior in README.
 - Rely on in-app read/write confirmation as ground truth.
 
-## 6) Podcast native playback integration risk (Medium)
+## 6) react-native-track-player incompatible with New Architecture (High — active blocker)
 
 Risk:
 
-- `react-native-track-player` setup differs across Android devices/ROMs, and emulator behavior does not fully represent device playback/background behavior.
+- `react-native-track-player@4.1.2` crashes the app on startup when running under RN 0.84 with New Architecture enabled.
+- Root cause (confirmed via logcat): the TurboModule interop layer fails to parse `@ReactMethod` annotations because the module has synchronous methods with non-void return types. This violates the TurboModule contract: `TurboModule system assumes returnType == void iff the method is synchronous`.
+- The crash produces `SIGABRT` before any UI renders.
 
-Mitigation:
+Mitigation (active):
 
-- Keep Podcasts as a spike in MVP and verify on a physical Android device.
-- Register playback service early and validate setup before investing in player UI.
+- `react-native-track-player` is intentionally **not imported anywhere in the JS bundle**.
+- The npm package remains installed for future use, but all JS imports and `registerPlaybackService` calls have been removed from `index.js` and `PodcastsScreen.tsx`.
+- The Podcasts tab shows a static placeholder until a New Architecture-compatible version is available.
+
+Required before re-integrating:
+
+- Verify that the new version of `react-native-track-player` ships a proper TurboModule spec and passes `TurboModuleInteropUtils` parsing.
+- Test on a physical device before adding any player UI.
