@@ -44,6 +44,7 @@ export function usePodcasts(): UsePodcastsResult {
 
     setError(null);
     setIsLoading(true);
+    let knownEpisodeIds: Set<string> | null = null;
 
     try {
       const files = await listGeneralMarkdownFiles(baseUri);
@@ -130,17 +131,7 @@ export function usePodcasts(): UsePodcastsResult {
 
       setAllEpisodes(nextAllEpisodes);
       setSections(nextSections);
-
-      const playlistEntry = await readPlaylist(baseUri);
-      if (playlistEntry) {
-        const knownEpisodeIds = new Set(
-          nextAllEpisodes.map(episode => episode.id),
-        );
-
-        if (!knownEpisodeIds.has(playlistEntry.episodeId)) {
-          await clearPlaylist(baseUri);
-        }
-      }
+      knownEpisodeIds = new Set(nextAllEpisodes.map(episode => episode.id));
     } catch (loadError) {
       const fallbackMessage = 'Could not load podcasts from vault.';
       setError(loadError instanceof Error ? loadError.message : fallbackMessage);
@@ -149,6 +140,24 @@ export function usePodcasts(): UsePodcastsResult {
     } finally {
       setIsLoading(false);
     }
+
+    if (!knownEpisodeIds) {
+      return;
+    }
+
+    // Keep playlist cleanup off the critical render path for initial screen loading.
+    const runPlaylistHousekeeping = async () => {
+      const playlistEntry = await readPlaylist(baseUri);
+      if (!playlistEntry) {
+        return;
+      }
+
+      if (!knownEpisodeIds.has(playlistEntry.episodeId)) {
+        await clearPlaylist(baseUri);
+      }
+    };
+
+    runPlaylistHousekeeping().catch(() => undefined);
   }, [baseUri]);
 
   useEffect(() => {
