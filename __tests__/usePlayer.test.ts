@@ -7,6 +7,12 @@ import {useVaultContext} from '../src/core/vault/VaultContext';
 import {getAudioPlayer} from '../src/features/podcasts/services/audioPlayer';
 import {PodcastEpisode} from '../src/types';
 
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  getItem: jest.fn(),
+  removeItem: jest.fn(),
+  setItem: jest.fn(),
+}));
+
 jest.mock('../src/core/storage/noteboxStorage', () => ({
   clearPlaylist: jest.fn(),
   readPlaylist: jest.fn(),
@@ -52,8 +58,8 @@ function HookHarness({episodesById, onResult}: HookHarnessProps) {
 }
 
 function flushPromises(): Promise<void> {
-  return new Promise(resolve => {
-    setTimeout(resolve, 0);
+  return new Promise<void>(resolve => {
+    setTimeout(() => resolve(), 0);
   });
 }
 

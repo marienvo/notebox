@@ -14,6 +14,10 @@ import {
   extractRssPodcastTitle,
   normalizeSeriesKey,
 } from '../services/rssParser';
+import {
+  loadPersistentArtworkUriCache,
+  primeArtworkCacheFromDisk,
+} from '../services/podcastImageCache';
 
 const RSS_PODCAST_FILE_PATTERN = /^📻\s+.+\.md$/;
 
@@ -109,6 +113,13 @@ export function usePodcasts(): UsePodcastsResult {
   const [isLoading, setIsLoading] = useState(false);
   const [sections, setSections] = useState<PodcastSection[]>([]);
 
+  useEffect(() => {
+    if (!baseUri) {
+      return;
+    }
+    loadPersistentArtworkUriCache(baseUri).catch(() => undefined);
+  }, [baseUri]);
+
   const refresh = useCallback(async () => {
     if (!baseUri) {
       setAllEpisodes([]);
@@ -192,12 +203,14 @@ export function usePodcasts(): UsePodcastsResult {
         const rssContentsByFile = await Promise.all(
           rssFeedFiles.map(file => readFileContentWithCache(file)),
         );
+        const rssFeedUrls = new Set<string>();
 
         for (const {content, file} of rssContentsByFile) {
           const rssFeedUrl = extractRssFeedUrl(content);
           if (!rssFeedUrl) {
             continue;
           }
+          rssFeedUrls.add(rssFeedUrl);
           const sectionTitle = extractRssPodcastTitle(file.name, content);
           persistRssFeedUrl(baseUri, sectionTitle, rssFeedUrl);
         }
@@ -207,11 +220,13 @@ export function usePodcasts(): UsePodcastsResult {
           (episode, index) => episode.rssFeedUrl !== renderedEpisodes[index]?.rssFeedUrl,
         );
         if (!hasRssUpdates) {
+          primeArtworkCacheFromDisk(baseUri, Array.from(rssFeedUrls)).catch(() => undefined);
           return;
         }
 
         setAllEpisodes(enrichedEpisodes);
         setSections(createSectionsWithRss(baseUri, enrichedEpisodes));
+        primeArtworkCacheFromDisk(baseUri, Array.from(rssFeedUrls)).catch(() => undefined);
       };
 
       runRssEnrichment().catch(() => undefined);

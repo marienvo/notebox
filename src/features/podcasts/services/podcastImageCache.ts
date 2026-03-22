@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   readPodcastImageCacheEntry,
   writePodcastImageFile,
@@ -11,9 +12,79 @@ export const PODCAST_IMAGE_REMOTE_FALLBACK_TTL_MS = 60 * 60 * 1000;
 const ARTWORK_DOWNLOAD_TIMEOUT_MS = 10000;
 const inFlightArtworkRequests = new Map<string, Promise<string | null>>();
 const artworkUriMemoryCache = new Map<string, string | null>();
+const persistentArtworkWriteChains = new Map<string, Promise<void>>();
+const PERSISTENT_ARTWORK_CACHE_KEY_PREFIX = 'notebox:artworkUriCache:';
 
 function getArtworkMemoryCacheKey(baseUri: string, rssFeedUrl: string): string {
   return `${baseUri}::${getPodcastImageCacheKey(rssFeedUrl)}`;
+}
+
+function getPersistentArtworkCacheStorageKey(baseUri: string): string {
+  return `${PERSISTENT_ARTWORK_CACHE_KEY_PREFIX}${baseUri}`;
+}
+
+function getPersistentArtworkEntries(baseUri: string): Record<string, string> {
+  const entries: Record<string, string> = {};
+  const basePrefix = `${baseUri}::`;
+
+  for (const [cacheKey, uri] of artworkUriMemoryCache.entries()) {
+    if (!cacheKey.startsWith(basePrefix)) {
+      continue;
+    }
+    if (typeof uri !== 'string') {
+      continue;
+    }
+    const normalizedUri = uri.trim();
+    if (!normalizedUri) {
+      continue;
+    }
+    entries[cacheKey] = normalizedUri;
+  }
+
+  return entries;
+}
+
+async function persistArtworkUriCache(baseUri: string): Promise<void> {
+  if (!baseUri) {
+    return;
+  }
+
+  const storageKey = getPersistentArtworkCacheStorageKey(baseUri);
+  const entries = getPersistentArtworkEntries(baseUri);
+  if (Object.keys(entries).length === 0) {
+    await AsyncStorage.removeItem(storageKey);
+    return;
+  }
+
+  await AsyncStorage.setItem(storageKey, JSON.stringify(entries));
+}
+
+function schedulePersistArtworkUriCache(baseUri: string): void {
+  const previousWrite = persistentArtworkWriteChains.get(baseUri) ?? Promise.resolve();
+  const nextWrite = previousWrite
+    .catch(() => undefined)
+    .then(async () => {
+      await persistArtworkUriCache(baseUri);
+    });
+
+  persistentArtworkWriteChains.set(baseUri, nextWrite);
+  nextWrite
+    .catch(() => undefined)
+    .finally(() => {
+      if (persistentArtworkWriteChains.get(baseUri) === nextWrite) {
+        persistentArtworkWriteChains.delete(baseUri);
+      }
+    });
+}
+
+function setArtworkUriCacheValue(
+  baseUri: string,
+  normalizedRssFeedUrl: string,
+  uri: string | null,
+): void {
+  const memoryCacheKey = getArtworkMemoryCacheKey(baseUri, normalizedRssFeedUrl);
+  artworkUriMemoryCache.set(memoryCacheKey, uri);
+  schedulePersistArtworkUriCache(baseUri);
 }
 
 function isRenderableUri(uri: string): boolean {
@@ -174,12 +245,12 @@ export async function getCachedPodcastArtworkUri(
   const cacheKey = getPodcastImageCacheKey(normalizedRssFeedUrl);
   const cachedEntry = await readPodcastImageCacheEntry(baseUri, cacheKey);
   if (!cachedEntry || !isEntryFresh(cachedEntry)) {
-    artworkUriMemoryCache.set(memoryCacheKey, null);
+    setArtworkUriCacheValue(baseUri, normalizedRssFeedUrl, null);
     return null;
   }
 
   const renderableUri = getRenderableArtworkUri(cachedEntry);
-  artworkUriMemoryCache.set(memoryCacheKey, renderableUri);
+  setArtworkUriCacheValue(baseUri, normalizedRssFeedUrl, renderableUri);
   return renderableUri;
 }
 
@@ -208,14 +279,14 @@ export async function getPodcastArtworkUri(
     const cachedEntry = await readPodcastImageCacheEntry(baseUri, cacheKey);
     if (cachedEntry && isEntryFresh(cachedEntry)) {
       const cachedUri = getRenderableArtworkUri(cachedEntry);
-      artworkUriMemoryCache.set(memoryCacheKey, cachedUri);
+      setArtworkUriCacheValue(baseUri, normalizedRssFeedUrl, cachedUri);
       return cachedUri;
     }
 
     const imageUrl = await fetchRssArtworkUrl(normalizedRssFeedUrl);
     if (!imageUrl) {
       const fallbackUri = getRenderableArtworkUri(cachedEntry);
-      artworkUriMemoryCache.set(memoryCacheKey, fallbackUri);
+      setArtworkUriCacheValue(baseUri, normalizedRssFeedUrl, fallbackUri);
       return fallbackUri;
     }
 
@@ -235,7 +306,7 @@ export async function getPodcastArtworkUri(
         localImageUri,
         mimeType: downloadedImage.mimeType,
       });
-      artworkUriMemoryCache.set(memoryCacheKey, localImageUri);
+      setArtworkUriCacheValue(baseUri, normalizedRssFeedUrl, localImageUri);
       return localImageUri;
     }
 
@@ -243,7 +314,7 @@ export async function getPodcastArtworkUri(
       fetchedAt,
       imageUrl,
     });
-    artworkUriMemoryCache.set(memoryCacheKey, imageUrl);
+    setArtworkUriCacheValue(baseUri, normalizedRssFeedUrl, imageUrl);
     return imageUrl;
   })();
 
@@ -260,4 +331,47 @@ export function warmPodcastArtworkCache(
   rssFeedUrl: string,
 ): void {
   getPodcastArtworkUri(baseUri, rssFeedUrl).catch(() => undefined);
+}
+
+export async function loadPersistentArtworkUriCache(baseUri: string): Promise<void> {
+  if (!baseUri) {
+    return;
+  }
+
+  const storageKey = getPersistentArtworkCacheStorageKey(baseUri);
+  const rawCache = await AsyncStorage.getItem(storageKey);
+  if (!rawCache?.trim()) {
+    return;
+  }
+
+  let parsedCache: Record<string, unknown>;
+  try {
+    parsedCache = JSON.parse(rawCache) as Record<string, unknown>;
+  } catch {
+    return;
+  }
+
+  for (const [cacheKey, cacheValue] of Object.entries(parsedCache)) {
+    if (typeof cacheValue !== 'string') {
+      continue;
+    }
+
+    const normalizedValue = cacheValue.trim();
+    if (!normalizedValue) {
+      continue;
+    }
+    if (!artworkUriMemoryCache.has(cacheKey)) {
+      artworkUriMemoryCache.set(cacheKey, normalizedValue);
+    }
+  }
+}
+
+export async function primeArtworkCacheFromDisk(
+  baseUri: string,
+  rssFeedUrls: string[],
+): Promise<void> {
+  const uniqueFeedUrls = Array.from(
+    new Set(rssFeedUrls.map(feedUrl => feedUrl.trim()).filter(Boolean)),
+  );
+  await Promise.all(uniqueFeedUrls.map(feedUrl => getCachedPodcastArtworkUri(baseUri, feedUrl)));
 }

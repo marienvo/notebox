@@ -15,6 +15,10 @@ import {
   extractRssPodcastTitle,
   normalizeSeriesKey,
 } from '../src/features/podcasts/services/rssParser';
+import {
+  loadPersistentArtworkUriCache,
+  primeArtworkCacheFromDisk,
+} from '../src/features/podcasts/services/podcastImageCache';
 import {PodcastEpisode} from '../src/types';
 
 jest.mock('../src/core/storage/noteboxStorage', () => ({
@@ -38,6 +42,11 @@ jest.mock('../src/features/podcasts/services/rssParser', () => ({
   extractRssFeedUrl: jest.fn(),
   extractRssPodcastTitle: jest.fn(),
   normalizeSeriesKey: jest.fn(),
+}));
+
+jest.mock('../src/features/podcasts/services/podcastImageCache', () => ({
+  loadPersistentArtworkUriCache: jest.fn(),
+  primeArtworkCacheFromDisk: jest.fn(),
 }));
 
 type PodcastsHookSnapshot = {
@@ -65,8 +74,8 @@ function HookHarness({onResult}: HookHarnessProps) {
 }
 
 function flushPromises(): Promise<void> {
-  return new Promise(resolve => {
-    setTimeout(resolve, 0);
+  return new Promise<void>(resolve => {
+    setTimeout(() => resolve(), 0);
   });
 }
 
@@ -116,6 +125,13 @@ describe('usePodcasts loading lifecycle', () => {
   const normalizeSeriesKeyMock = normalizeSeriesKey as jest.MockedFunction<
     typeof normalizeSeriesKey
   >;
+  const loadPersistentArtworkUriCacheMock =
+    loadPersistentArtworkUriCache as jest.MockedFunction<
+      typeof loadPersistentArtworkUriCache
+    >;
+  const primeArtworkCacheFromDiskMock = primeArtworkCacheFromDisk as jest.MockedFunction<
+    typeof primeArtworkCacheFromDisk
+  >;
 
   let baseUri = 'content://vault-root';
   const legacyEpisode: PodcastEpisode = {
@@ -143,6 +159,8 @@ describe('usePodcasts loading lifecycle', () => {
     });
 
     readPlaylistMock.mockResolvedValue(null);
+    loadPersistentArtworkUriCacheMock.mockResolvedValue();
+    primeArtworkCacheFromDiskMock.mockResolvedValue();
     listGeneralMarkdownFilesMock.mockResolvedValue([]);
     readPodcastFileContentMock.mockResolvedValue('# content');
     isPodcastFileMock.mockImplementation(fileName => fileName.includes('- podcasts.md'));

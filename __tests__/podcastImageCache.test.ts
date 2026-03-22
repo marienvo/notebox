@@ -1,7 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getCachedPodcastArtworkUri,
   getPodcastArtworkUri,
   getPodcastImageCacheKey,
+  loadPersistentArtworkUriCache,
   PODCAST_IMAGE_CACHE_TTL_MS,
   PODCAST_IMAGE_REMOTE_FALLBACK_TTL_MS,
 } from '../src/features/podcasts/services/podcastImageCache';
@@ -22,7 +24,22 @@ jest.mock('../src/features/podcasts/services/rssArtwork', () => ({
   fetchRssArtworkUrl: jest.fn(),
 }));
 
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  getItem: jest.fn(),
+  removeItem: jest.fn(),
+  setItem: jest.fn(),
+}));
+
 describe('podcastImageCache', () => {
+  const asyncStorageGetItemMock = AsyncStorage.getItem as jest.MockedFunction<
+    typeof AsyncStorage.getItem
+  >;
+  const asyncStorageRemoveItemMock = AsyncStorage.removeItem as jest.MockedFunction<
+    typeof AsyncStorage.removeItem
+  >;
+  const asyncStorageSetItemMock = AsyncStorage.setItem as jest.MockedFunction<
+    typeof AsyncStorage.setItem
+  >;
   const readCacheMock = readPodcastImageCacheEntry as jest.MockedFunction<
     typeof readPodcastImageCacheEntry
   >;
@@ -48,10 +65,19 @@ describe('podcastImageCache', () => {
     return `https://feed.example.com/podcast-${testCounter}.xml`;
   }
 
+  async function flushPromises(): Promise<void> {
+    await new Promise<void>(resolve => {
+      setTimeout(() => resolve(), 0);
+    });
+  }
+
   beforeEach(() => {
     jest.clearAllMocks();
     (globalThis as unknown as {fetch: typeof fetch}).fetch =
       globalFetchMock as unknown as typeof fetch;
+    asyncStorageGetItemMock.mockResolvedValue(null);
+    asyncStorageSetItemMock.mockResolvedValue();
+    asyncStorageRemoveItemMock.mockResolvedValue();
   });
 
   test('returns fresh local cache entry without fetching RSS', async () => {
@@ -194,5 +220,50 @@ describe('podcastImageCache', () => {
       'content://com.android.externalstorage.documents/tree/primary/document/vault/rss-4.jpg',
     );
     expect(readCacheMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('loads persisted artwork URIs into memory cache', async () => {
+    const baseUri = nextBaseUri();
+    const rssFeedUrl = nextRssFeedUrl();
+    const memoryCacheKey = `${baseUri}::${getPodcastImageCacheKey(rssFeedUrl)}`;
+    asyncStorageGetItemMock.mockResolvedValueOnce(
+      JSON.stringify({
+        [memoryCacheKey]:
+          'content://com.android.externalstorage.documents/tree/primary/document/vault/rss-persisted.jpg',
+      }),
+    );
+
+    await loadPersistentArtworkUriCache(baseUri);
+    await expect(getCachedPodcastArtworkUri(baseUri, rssFeedUrl)).resolves.toBe(
+      'content://com.android.externalstorage.documents/tree/primary/document/vault/rss-persisted.jpg',
+    );
+
+    expect(asyncStorageGetItemMock).toHaveBeenCalledWith(
+      `notebox:artworkUriCache:${baseUri}`,
+    );
+    expect(readCacheMock).not.toHaveBeenCalled();
+  });
+
+  test('writes through artwork URI memory updates to AsyncStorage', async () => {
+    const baseUri = nextBaseUri();
+    const rssFeedUrl = nextRssFeedUrl();
+    const expectedUri =
+      'content://com.android.externalstorage.documents/tree/primary/document/vault/rss-write-through.jpg';
+    readCacheMock.mockResolvedValueOnce({
+      fetchedAt: new Date(Date.now() - 60_000).toISOString(),
+      imageUrl: 'https://cdn.example.com/remote-write-through.jpg',
+      localImageUri: expectedUri,
+    });
+
+    await expect(getCachedPodcastArtworkUri(baseUri, rssFeedUrl)).resolves.toBe(expectedUri);
+    await flushPromises();
+
+    const expectedMemoryCacheKey = `${baseUri}::${getPodcastImageCacheKey(rssFeedUrl)}`;
+    expect(asyncStorageSetItemMock).toHaveBeenCalledWith(
+      `notebox:artworkUriCache:${baseUri}`,
+      JSON.stringify({
+        [expectedMemoryCacheKey]: expectedUri,
+      }),
+    );
   });
 });
