@@ -10,6 +10,7 @@ import {
   NoteDetail,
   NoteSummary,
   NoteboxSettings,
+  PodcastImageCacheEntry,
   PlaylistEntry,
   RootMarkdownFile,
 } from '../../types';
@@ -18,6 +19,7 @@ const NOTEBOX_DIRECTORY_NAME = '.notebox';
 const GENERAL_DIRECTORY_NAME = 'General';
 const INBOX_DIRECTORY_NAME = 'Inbox';
 const PLAYLIST_FILE_NAME = 'playlist.json';
+const PODCAST_IMAGES_DIRECTORY_NAME = 'podcast-images';
 const SETTINGS_FILE_NAME = 'settings.json';
 const MARKDOWN_EXTENSION = '.md';
 
@@ -43,6 +45,14 @@ function getSettingsUri(baseUri: string): string {
 
 function getPlaylistUri(baseUri: string): string {
   return `${getNoteboxDirectoryUri(baseUri)}/${PLAYLIST_FILE_NAME}`;
+}
+
+function getPodcastImagesDirectoryUri(baseUri: string): string {
+  return `${getNoteboxDirectoryUri(baseUri)}/${PODCAST_IMAGES_DIRECTORY_NAME}`;
+}
+
+function getPodcastImageEntryUri(baseUri: string, cacheKey: string): string {
+  return `${getPodcastImagesDirectoryUri(baseUri)}/${cacheKey}.json`;
 }
 
 function getInboxDirectoryUri(baseUri: string): string {
@@ -78,6 +88,10 @@ function serializeSettings(settings: NoteboxSettings): string {
 }
 
 function serializePlaylist(entry: PlaylistEntry): string {
+  return `${JSON.stringify(entry, null, 2)}\n`;
+}
+
+function serializePodcastImageCacheEntry(entry: PodcastImageCacheEntry): string {
   return `${JSON.stringify(entry, null, 2)}\n`;
 }
 
@@ -122,6 +136,20 @@ function isValidPlaylistEntry(value: unknown): value is PlaylistEntry {
     typeof entry.mp3Url === 'string' &&
     typeof entry.positionMs === 'number' &&
     isDurationValid
+  );
+}
+
+function isValidPodcastImageCacheEntry(
+  value: unknown,
+): value is PodcastImageCacheEntry {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const entry = value as Partial<PodcastImageCacheEntry>;
+
+  return (
+    typeof entry.fetchedAt === 'string' && typeof entry.imageUrl === 'string'
   );
 }
 
@@ -436,6 +464,101 @@ export async function clearPlaylist(baseUri: string): Promise<void> {
   }
 
   await writeFile(playlistUri, '', {
+    encoding: 'utf8',
+    mimeType: 'application/json',
+  });
+}
+
+export async function readPodcastImageCacheEntry(
+  baseUri: string,
+  cacheKey: string,
+): Promise<PodcastImageCacheEntry | null> {
+  if (isDevMockVaultEnabled) {
+    const devStorage = getDevStorage();
+    return devStorage.readPodcastImageCacheEntry(baseUri, cacheKey);
+  }
+
+  const normalizedBaseUri = normalizeBaseUri(baseUri);
+  const normalizedCacheKey = cacheKey.trim();
+  if (!normalizedCacheKey) {
+    throw new Error('Cache key cannot be empty.');
+  }
+
+  const entryUri = getPodcastImageEntryUri(normalizedBaseUri, normalizedCacheKey);
+  if (!(await exists(entryUri))) {
+    return null;
+  }
+
+  const rawEntry = await readFile(entryUri, {encoding: 'utf8'});
+  if (!rawEntry.trim()) {
+    return null;
+  }
+
+  const parsed = JSON.parse(rawEntry) as unknown;
+  if (!isValidPodcastImageCacheEntry(parsed)) {
+    throw new Error('Podcast image cache entry has an invalid structure.');
+  }
+
+  return parsed;
+}
+
+export async function writePodcastImageCacheEntry(
+  baseUri: string,
+  cacheKey: string,
+  entry: PodcastImageCacheEntry,
+): Promise<void> {
+  if (isDevMockVaultEnabled) {
+    const devStorage = getDevStorage();
+    await devStorage.writePodcastImageCacheEntry(baseUri, cacheKey, entry);
+    return;
+  }
+
+  const normalizedBaseUri = normalizeBaseUri(baseUri);
+  const normalizedCacheKey = cacheKey.trim();
+  if (!normalizedCacheKey) {
+    throw new Error('Cache key cannot be empty.');
+  }
+
+  const noteboxDirectoryUri = getNoteboxDirectoryUri(normalizedBaseUri);
+  const podcastImagesDirectoryUri = getPodcastImagesDirectoryUri(normalizedBaseUri);
+  const entryUri = getPodcastImageEntryUri(normalizedBaseUri, normalizedCacheKey);
+
+  if (!(await exists(noteboxDirectoryUri))) {
+    await mkdir(noteboxDirectoryUri);
+  }
+
+  if (!(await exists(podcastImagesDirectoryUri))) {
+    await mkdir(podcastImagesDirectoryUri);
+  }
+
+  await writeFile(entryUri, serializePodcastImageCacheEntry(entry), {
+    encoding: 'utf8',
+    mimeType: 'application/json',
+  });
+}
+
+export async function clearPodcastImageCacheEntry(
+  baseUri: string,
+  cacheKey: string,
+): Promise<void> {
+  if (isDevMockVaultEnabled) {
+    const devStorage = getDevStorage();
+    await devStorage.clearPodcastImageCacheEntry(baseUri, cacheKey);
+    return;
+  }
+
+  const normalizedBaseUri = normalizeBaseUri(baseUri);
+  const normalizedCacheKey = cacheKey.trim();
+  if (!normalizedCacheKey) {
+    return;
+  }
+
+  const entryUri = getPodcastImageEntryUri(normalizedBaseUri, normalizedCacheKey);
+  if (!(await exists(entryUri))) {
+    return;
+  }
+
+  await writeFile(entryUri, '', {
     encoding: 'utf8',
     mimeType: 'application/json',
   });

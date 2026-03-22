@@ -1,14 +1,46 @@
 import {Box, Spinner, Text, useColorMode} from '@gluestack-ui/themed';
-import {SectionList, StyleSheet} from 'react-native';
+import {Image, SectionList, StyleSheet, View} from 'react-native';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
+import {useVaultContext} from '../../../core/vault/VaultContext';
 import {usePlayerContext} from '../context/PlayerContext';
 import {PodcastEpisode} from '../../../types';
 import {EpisodeRow} from '../components/EpisodeRow';
+import {usePodcastArtwork} from '../hooks/usePodcastArtwork';
 
 type PodcastSectionListItem = {
   data: PodcastEpisode[];
+  rssFeedUrl?: string;
   title: string;
 };
+
+type PodcastSectionHeaderProps = {
+  dividerColor: string;
+  rssFeedUrl?: string;
+  title: string;
+};
+
+function PodcastSectionHeader({
+  dividerColor,
+  rssFeedUrl,
+  title,
+}: PodcastSectionHeaderProps) {
+  const {baseUri} = useVaultContext();
+  const artworkUri = usePodcastArtwork(baseUri, rssFeedUrl);
+
+  return (
+    <View style={[styles.sectionHeader, {borderBottomColor: dividerColor}]}>
+      {artworkUri ? (
+        <Image source={{uri: artworkUri}} style={styles.artwork} />
+      ) : (
+        <View style={styles.artworkPlaceholder}>
+          <MaterialIcons color="#8f8f8f" name="music-note" size={20} />
+        </View>
+      )}
+      <Text style={styles.sectionTitle}>{title}</Text>
+    </View>
+  );
+}
 
 export function PodcastsScreen() {
   const {
@@ -28,6 +60,7 @@ export function PodcastsScreen() {
   const mutedTextColor = colorMode === 'dark' ? '#cfcfcf' : '#616161';
   const sectionData: PodcastSectionListItem[] = sections.map(section => ({
     data: section.episodes,
+    rssFeedUrl: section.rssFeedUrl,
     title: section.title,
   }));
 
@@ -60,9 +93,11 @@ export function PodcastsScreen() {
           );
         }}
         renderSectionHeader={({section}) => (
-          <Text style={[styles.sectionTitle, {borderBottomColor: dividerColor}]}>
-            {section.title}
-          </Text>
+          <PodcastSectionHeader
+            dividerColor={dividerColor}
+            rssFeedUrl={section.rssFeedUrl}
+            title={section.title}
+          />
         )}
         ListEmptyComponent={
           !podcastsLoading ? (
@@ -77,6 +112,21 @@ export function PodcastsScreen() {
 }
 
 const styles = StyleSheet.create({
+  artwork: {
+    borderRadius: 8,
+    height: 40,
+    marginRight: 10,
+    width: 40,
+  },
+  artworkPlaceholder: {
+    alignItems: 'center',
+    backgroundColor: '#e2e2e2',
+    borderRadius: 8,
+    height: 40,
+    justifyContent: 'center',
+    marginRight: 10,
+    width: 40,
+  },
   container: {
     flex: 1,
     paddingHorizontal: 20,
@@ -85,12 +135,17 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 24,
   },
-  sectionTitle: {
+  sectionHeader: {
     borderBottomWidth: 1,
-    fontSize: 18,
-    fontWeight: '700',
+    flexDirection: 'row',
+    alignItems: 'center',
     marginTop: 12,
     paddingBottom: 6,
+  },
+  sectionTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '700',
   },
   spinner: {
     marginVertical: 10,

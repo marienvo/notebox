@@ -4,6 +4,7 @@ import {
   NoteDetail,
   NoteSummary,
   NoteboxSettings,
+  PodcastImageCacheEntry,
   PlaylistEntry,
   RootMarkdownFile,
 } from '../types';
@@ -21,6 +22,7 @@ const DEV_SETTINGS_KEY = `${DEV_STORAGE_PREFIX}:settings`;
 const DEV_NOTES_INDEX_KEY = `${DEV_STORAGE_PREFIX}:notes:index`;
 const DEV_PODCAST_INDEX_KEY = `${DEV_STORAGE_PREFIX}:podcasts:index`;
 const DEV_PLAYLIST_KEY = `${DEV_STORAGE_PREFIX}:playlist`;
+const DEV_PODCAST_IMAGE_PREFIX = `${DEV_STORAGE_PREFIX}:podcast-image`;
 const GENERAL_DIRECTORY_NAME = 'General';
 const INBOX_DIRECTORY_NAME = 'Inbox';
 const MARKDOWN_EXTENSION = '.md';
@@ -34,6 +36,10 @@ function devNoteKey(noteName: string): string {
 
 function devPodcastKey(fileName: string): string {
   return `${DEV_STORAGE_PREFIX}:podcast:${fileName}`;
+}
+
+function devPodcastImageKey(cacheKey: string): string {
+  return `${DEV_PODCAST_IMAGE_PREFIX}:${cacheKey}`;
 }
 
 function normalizeBaseUri(baseUri: string): string {
@@ -153,7 +159,7 @@ async function writePodcastIndex(index: PodcastIndex): Promise<void> {
 async function ensureSeeded(): Promise<void> {
   const seeded = await AsyncStorage.getItem(DEV_SEEDED_KEY);
 
-  if (seeded === '2') {
+  if (seeded === '3') {
     return;
   }
 
@@ -178,7 +184,7 @@ async function ensureSeeded(): Promise<void> {
   await writeNotesIndex(notesIndex);
   await writePodcastIndex(podcastIndex);
   await AsyncStorage.setItem(DEV_SETTINGS_KEY, serializeSettings(MOCK_SETTINGS));
-  await AsyncStorage.setItem(DEV_SEEDED_KEY, '2');
+  await AsyncStorage.setItem(DEV_SEEDED_KEY, '3');
 }
 
 function assertMockBaseUri(baseUri: string): void {
@@ -415,4 +421,58 @@ export async function clearPlaylist(baseUri: string): Promise<void> {
   await ensureSeeded();
 
   await AsyncStorage.removeItem(DEV_PLAYLIST_KEY);
+}
+
+export async function readPodcastImageCacheEntry(
+  baseUri: string,
+  cacheKey: string,
+): Promise<PodcastImageCacheEntry | null> {
+  assertMockBaseUri(baseUri);
+  await ensureSeeded();
+
+  const normalizedCacheKey = cacheKey.trim();
+  if (!normalizedCacheKey) {
+    throw new Error('Cache key cannot be empty.');
+  }
+
+  const rawEntry = await AsyncStorage.getItem(devPodcastImageKey(normalizedCacheKey));
+  if (!rawEntry) {
+    return null;
+  }
+
+  return JSON.parse(rawEntry) as PodcastImageCacheEntry;
+}
+
+export async function writePodcastImageCacheEntry(
+  baseUri: string,
+  cacheKey: string,
+  entry: PodcastImageCacheEntry,
+): Promise<void> {
+  assertMockBaseUri(baseUri);
+  await ensureSeeded();
+
+  const normalizedCacheKey = cacheKey.trim();
+  if (!normalizedCacheKey) {
+    throw new Error('Cache key cannot be empty.');
+  }
+
+  await AsyncStorage.setItem(
+    devPodcastImageKey(normalizedCacheKey),
+    JSON.stringify(entry),
+  );
+}
+
+export async function clearPodcastImageCacheEntry(
+  baseUri: string,
+  cacheKey: string,
+): Promise<void> {
+  assertMockBaseUri(baseUri);
+  await ensureSeeded();
+
+  const normalizedCacheKey = cacheKey.trim();
+  if (!normalizedCacheKey) {
+    return;
+  }
+
+  await AsyncStorage.removeItem(devPodcastImageKey(normalizedCacheKey));
 }

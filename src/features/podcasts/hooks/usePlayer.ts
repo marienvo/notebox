@@ -7,6 +7,10 @@ import {
 import {PlaylistEntry, PodcastEpisode} from '../../../types';
 import {useVaultContext} from '../../../core/vault/VaultContext';
 import {getAudioPlayer, PlayerProgress, PlayerState} from '../services/audioPlayer';
+import {
+  getCachedPodcastArtworkUri,
+  warmPodcastArtworkCache,
+} from '../services/podcastImageCache';
 
 type UsePlayerResult = {
   activeEpisode: PodcastEpisode | null;
@@ -159,16 +163,22 @@ export function usePlayer(
       setIsLoading(true);
       try {
         let startPositionMs = 0;
+        let artwork: string | undefined;
         if (baseUri) {
           const saved = await readPlaylist(baseUri);
           if (saved && saved.episodeId === episode.id) {
             startPositionMs = saved.positionMs;
+          }
+          if (episode.rssFeedUrl) {
+            artwork = (await getCachedPodcastArtworkUri(baseUri, episode.rssFeedUrl)) ?? undefined;
+            warmPodcastArtworkCache(baseUri, episode.rssFeedUrl);
           }
         }
 
         await player.play(
           {
             artist: episode.seriesName,
+            artwork,
             id: episode.id,
             title: episode.title,
             url: episode.mp3Url,
