@@ -9,17 +9,16 @@ import {
 import {PodcastEpisode, PodcastSection} from '../../../types';
 import {useVaultContext} from '../../../core/vault/VaultContext';
 import {groupBySection, isPodcastFile, parsePodcastFile} from '../services/podcastParser';
+import {
+  extractRssFeedUrl,
+  extractRssPodcastTitle,
+  normalizeSeriesKey,
+} from '../services/rssParser';
 
 const RSS_PODCAST_FILE_PATTERN = /^📻\s+.+\.md$/;
 
 type FileContentCacheEntry = {lastModified: number; content: string};
 const fileContentCache = new Map<string, FileContentCacheEntry>();
-const FRONTMATTER_PATTERN = /^---\s*\r?\n([\s\S]*?)\r?\n---\s*/;
-const RSS_FEED_URL_PATTERN = /^\s*rssFeedUrl\s*:\s*(.+)\s*$/im;
-const H1_TITLE_PATTERN = /^\s*#\s+(.+?)\s*$/m;
-const DATE_HEADER_PATTERN = /^\s*##\s+(.+?)\s*$/;
-const EPISODE_LINE_PATTERN =
-  /^\s*-\s*(?:\[🌐\]\(([^)]+)\)\s*)?(.+?)\s*\[▶️?\]\(([^)]+)\)\s*$/;
 
 type UsePodcastsResult = {
   allEpisodes: PodcastEpisode[];
@@ -28,110 +27,6 @@ type UsePodcastsResult = {
   refresh: () => Promise<void>;
   sections: PodcastSection[];
 };
-
-function trimWrappingQuotes(value: string): string {
-  const trimmed = value.trim();
-  if (
-    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-    (trimmed.startsWith("'") && trimmed.endsWith("'"))
-  ) {
-    return trimmed.slice(1, -1).trim();
-  }
-
-  return trimmed;
-}
-
-function extractRssFeedUrl(content: string): string | undefined {
-  const frontmatterMatch = FRONTMATTER_PATTERN.exec(content);
-  if (!frontmatterMatch) {
-    return undefined;
-  }
-
-  const rssFeedMatch = RSS_FEED_URL_PATTERN.exec(frontmatterMatch[1]);
-  if (!rssFeedMatch) {
-    return undefined;
-  }
-
-  const rssFeedUrl = trimWrappingQuotes(rssFeedMatch[1]);
-  return rssFeedUrl || undefined;
-}
-
-function normalizeDateString(rawDate: string): string {
-  const withoutOrdinal = rawDate.replace(/\b(\d{1,2})(st|nd|rd|th)\b/gi, '$1');
-  const parsed = Date.parse(withoutOrdinal);
-  if (!Number.isFinite(parsed)) {
-    return new Date().toISOString().slice(0, 10);
-  }
-
-  return new Date(parsed).toISOString().slice(0, 10);
-}
-
-function extractRssPodcastTitle(fileName: string, content: string): string {
-  const headingMatch = H1_TITLE_PATTERN.exec(content);
-  if (headingMatch?.[1]?.trim()) {
-    return headingMatch[1].trim();
-  }
-
-  const withoutExtension = fileName.replace(/\.md$/i, '');
-  return withoutExtension.replace(/^📻\s+/, '').trim();
-}
-
-function normalizeSeriesKey(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-}
-
-function parseRssPodcastEpisodes(
-  fileName: string,
-  content: string,
-  sectionTitle: string,
-  rssFeedUrl?: string,
-): PodcastEpisode[] {
-  const bodyWithoutFrontmatter = content.replace(FRONTMATTER_PATTERN, '').trim();
-  const lines = bodyWithoutFrontmatter.split(/\r?\n/);
-  const episodes: PodcastEpisode[] = [];
-  let activeDate = new Date().toISOString().slice(0, 10);
-
-  for (const line of lines) {
-    const dateHeader = DATE_HEADER_PATTERN.exec(line);
-    if (dateHeader?.[1]) {
-      activeDate = normalizeDateString(dateHeader[1]);
-      continue;
-    }
-
-    const episodeMatch = EPISODE_LINE_PATTERN.exec(line);
-    if (!episodeMatch) {
-      continue;
-    }
-
-    const articleUrl = episodeMatch[1]?.trim() || undefined;
-    const title = episodeMatch[2]?.trim();
-    const mp3Url = episodeMatch[3]?.trim();
-    if (!title || !mp3Url) {
-      continue;
-    }
-
-    episodes.push({
-      articleUrl,
-      date: activeDate,
-      id: mp3Url,
-      isListened: false,
-      mp3Url,
-      rssFeedUrl,
-      sectionTitle,
-      seriesName: sectionTitle,
-      sourceFile: fileName,
-      title,
-    });
-  }
-
-  return episodes;
-}
 
 export function usePodcasts(): UsePodcastsResult {
   const {baseUri} = useVaultContext();
@@ -174,7 +69,6 @@ export function usePodcasts(): UsePodcastsResult {
       const rssBySeriesName = new Map<string, string>();
       const rssByNormalizedSeriesName = new Map<string, string>();
       const legacyEpisodes: PodcastEpisode[] = [];
-      const rssEpisodes: PodcastEpisode[] = [];
 
       for (const {content, file} of contentsByFile) {
         if (isPodcastFile(file.name)) {
@@ -194,9 +88,6 @@ export function usePodcasts(): UsePodcastsResult {
             rssByNormalizedSeriesName.set(normalizedSectionKey, rssFeedUrl);
           }
         }
-        rssEpisodes.push(
-          ...parseRssPodcastEpisodes(file.name, content, sectionTitle, rssFeedUrl),
-        );
       }
 
       const legacyEpisodesWithRss = legacyEpisodes.map(episode => ({
@@ -207,7 +98,7 @@ export function usePodcasts(): UsePodcastsResult {
       }));
 
       const dedupedEpisodes = new Map<string, PodcastEpisode>();
-      for (const episode of [...rssEpisodes, ...legacyEpisodesWithRss]) {
+      for (const episode of legacyEpisodesWithRss) {
         if (!dedupedEpisodes.has(episode.id)) {
           dedupedEpisodes.set(episode.id, episode);
         }
