@@ -11,6 +11,9 @@ import {useVaultContext} from '../../../core/vault/VaultContext';
 import {groupBySection, isPodcastFile, parsePodcastFile} from '../services/podcastParser';
 
 const RSS_PODCAST_FILE_PATTERN = /^📻\s+.+\.md$/;
+
+type FileContentCacheEntry = {lastModified: number; content: string};
+const fileContentCache = new Map<string, FileContentCacheEntry>();
 const FRONTMATTER_PATTERN = /^---\s*\r?\n([\s\S]*?)\r?\n---\s*/;
 const RSS_FEED_URL_PATTERN = /^\s*rssFeedUrl\s*:\s*(.+)\s*$/im;
 const H1_TITLE_PATTERN = /^\s*#\s+(.+?)\s*$/m;
@@ -152,11 +155,20 @@ export function usePodcasts(): UsePodcastsResult {
       const podcastFiles = files.filter(
         file => isPodcastFile(file.name) || RSS_PODCAST_FILE_PATTERN.test(file.name),
       );
+
       const contentsByFile = await Promise.all(
-        podcastFiles.map(async file => ({
-          content: await readPodcastFileContent(file.uri),
-          file,
-        })),
+        podcastFiles.map(async file => {
+          const lastModified = file.lastModified ?? -1;
+          const cached = fileContentCache.get(file.uri);
+          if (cached && lastModified > 0 && cached.lastModified === lastModified) {
+            return {content: cached.content, file};
+          }
+          const content = await readPodcastFileContent(file.uri);
+          if (lastModified > 0) {
+            fileContentCache.set(file.uri, {lastModified, content});
+          }
+          return {content, file};
+        }),
       );
 
       const rssBySeriesName = new Map<string, string>();

@@ -153,7 +153,7 @@ export function PodcastsScreen() {
         // SectionList expects each section to expose a `data` array.
         contentContainerStyle={styles.listContent}
         onRefresh={refreshPodcasts}
-        refreshing={podcastsLoading}
+        refreshing={podcastsLoading && sections.length > 0}
         sections={sectionData}
         keyExtractor={item => item.id}
         renderItem={({item}) => {

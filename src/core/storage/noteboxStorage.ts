@@ -595,7 +595,36 @@ export async function writePodcastImageFile(
     encoding: 'base64',
     mimeType: normalizedMimeType || 'image/*',
   });
-  return imageUri;
+
+  // react-native-saf-x's writeFile(), createFile(), and stat() all return the same
+  // path-style tree URI (content://…/tree/{treeId}/{path}). Android's Glide image
+  // loader (used by React Native Image) cannot open this format — it requires a proper
+  // SAF document URI (content://…/tree/{encodedTreeId}/document/{encodedDocId}).
+  // We construct it manually from the known tree root (baseUri) and file path.
+  const documentUri = buildSafDocumentUri(normalizedBaseUri, imageUri);
+
+  return documentUri ?? imageUri;
+}
+
+/**
+ * Converts a react-native-saf-x path-style tree URI to a proper SAF document URI
+ * that Android's ContentResolver (and Glide) can open.
+ *
+ * Path-style: content://com.android.externalstorage.documents/tree/primary:Notes/.notebox/img.jpg
+ * Document:   content://com.android.externalstorage.documents/tree/primary%3ANotes/document/primary%3ANotes%2F.notebox%2Fimg.jpg
+ */
+export function buildSafDocumentUri(
+  treeRootUri: string,
+  pathStyleUri: string,
+): string | null {
+  const prefix = 'content://com.android.externalstorage.documents/tree/';
+  if (!treeRootUri.startsWith(prefix) || !pathStyleUri.startsWith(treeRootUri + '/')) {
+    return null;
+  }
+  const treeId = treeRootUri.slice(prefix.length);
+  const relPath = pathStyleUri.slice(treeRootUri.length + 1);
+  const docId = `${treeId}/${relPath}`;
+  return `${prefix}${encodeURIComponent(treeId)}/document/${encodeURIComponent(docId)}`;
 }
 
 export async function clearPodcastImageCacheEntry(

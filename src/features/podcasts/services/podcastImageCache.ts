@@ -11,15 +11,35 @@ export const PODCAST_IMAGE_REMOTE_FALLBACK_TTL_MS = 60 * 60 * 1000;
 const ARTWORK_DOWNLOAD_TIMEOUT_MS = 10000;
 const inFlightArtworkRequests = new Map<string, Promise<string | null>>();
 
+function isRenderableUri(uri: string): boolean {
+  if (!uri.startsWith('content://')) {
+    // http/https and file:// URIs are always renderable.
+    return true;
+  }
+  // SAF tree-path URIs (content://…/tree/… without /document/) cannot be opened
+  // by React Native Image's Glide loader. Only proper document URIs work.
+  return uri.includes('/document/');
+}
+
 function isEntryFresh(entry: PodcastImageCacheEntry): boolean {
   const fetchedAt = Date.parse(entry.fetchedAt);
   if (!Number.isFinite(fetchedAt)) {
     return false;
   }
 
-  const hasLocalImage = Boolean(entry.localImageUri?.trim());
-  const ttlMs = hasLocalImage ? PODCAST_IMAGE_CACHE_TTL_MS : PODCAST_IMAGE_REMOTE_FALLBACK_TTL_MS;
-  return Date.now() - fetchedAt < ttlMs;
+  const localImageUri = entry.localImageUri?.trim();
+  if (!localImageUri) {
+    return Date.now() - fetchedAt < PODCAST_IMAGE_REMOTE_FALLBACK_TTL_MS;
+  }
+
+  // Entries whose localImageUri uses the old path-style SAF tree URI (no /document/)
+  // are treated as stale so they get re-downloaded and stored with the correct
+  // document URI format returned by stat() in writePodcastImageFile.
+  if (!isRenderableUri(localImageUri)) {
+    return false;
+  }
+
+  return Date.now() - fetchedAt < PODCAST_IMAGE_CACHE_TTL_MS;
 }
 
 function getRenderableArtworkUri(entry: PodcastImageCacheEntry | null): string | null {
@@ -28,7 +48,7 @@ function getRenderableArtworkUri(entry: PodcastImageCacheEntry | null): string |
   }
 
   const localImageUri = entry.localImageUri?.trim();
-  if (localImageUri) {
+  if (localImageUri && isRenderableUri(localImageUri)) {
     return localImageUri;
   }
 

@@ -11,6 +11,7 @@ import {
 } from 'react-native-saf-x';
 
 import {
+  buildSafDocumentUri,
   clearPlaylist,
   createNote,
   listGeneralMarkdownFiles,
@@ -272,5 +273,35 @@ describe('noteboxStorage', () => {
       'QUJDRA==',
       {encoding: 'base64', mimeType: 'image/png'},
     );
+  });
+});
+
+describe('buildSafDocumentUri', () => {
+  const authority = 'content://com.android.externalstorage.documents/tree/';
+
+  test('converts a primary:Folder path-style URI to a proper document URI', () => {
+    const treeRoot = `${authority}primary:Notes`;
+    const pathStyle = `${authority}primary:Notes/.notebox/podcast-images/rss-abc.jpg`;
+    const expected =
+      `${authority}primary%3ANotes/document/primary%3ANotes%2F.notebox%2Fpodcast-images%2Frss-abc.jpg`;
+    expect(buildSafDocumentUri(treeRoot, pathStyle)).toBe(expected);
+  });
+
+  test('encodes colons and slashes in both treeId and docId', () => {
+    const treeRoot = `${authority}primary:Documents/Vault`;
+    const pathStyle = `${authority}primary:Documents/Vault/.notebox/podcast-images/img.png`;
+    const result = buildSafDocumentUri(treeRoot, pathStyle);
+    expect(result).toContain('/document/');
+    expect(result).toContain('primary%3ADocuments%2FVault');
+    expect(result).toContain('%2F.notebox%2Fpodcast-images%2Fimg.png');
+  });
+
+  test('returns null when baseUri is not an ExternalStorageProvider URI', () => {
+    expect(buildSafDocumentUri('content://notes', 'content://notes/.notebox/img.jpg')).toBeNull();
+  });
+
+  test('returns null when pathStyleUri does not start with treeRootUri', () => {
+    const treeRoot = `${authority}primary:Notes`;
+    expect(buildSafDocumentUri(treeRoot, `${authority}primary:Other/img.jpg`)).toBeNull();
   });
 });

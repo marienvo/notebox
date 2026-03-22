@@ -50,11 +50,11 @@ describe('podcastImageCache', () => {
     readCacheMock.mockResolvedValueOnce({
       fetchedAt: new Date(Date.now() - 60_000).toISOString(),
       imageUrl: 'https://cdn.example.com/remote.jpg',
-      localImageUri: 'content://vault/.notebox/podcast-images/rss-1.jpg',
+      localImageUri: 'content://com.android.externalstorage.documents/tree/primary/document/vault/rss-1.jpg',
     });
 
     await expect(getPodcastArtworkUri(baseUri, rssFeedUrl)).resolves.toBe(
-      'content://vault/.notebox/podcast-images/rss-1.jpg',
+      'content://com.android.externalstorage.documents/tree/primary/document/vault/rss-1.jpg',
     );
     expect(fetchRssArtworkUrlMock).not.toHaveBeenCalled();
     expect(globalFetchMock).not.toHaveBeenCalled();
@@ -66,16 +66,16 @@ describe('podcastImageCache', () => {
       .mockResolvedValueOnce({
         fetchedAt: new Date(Date.now() - 60_000).toISOString(),
         imageUrl: 'https://cdn.example.com/remote.jpg',
-        localImageUri: 'content://vault/.notebox/podcast-images/rss-2.jpg',
+        localImageUri: 'content://com.android.externalstorage.documents/tree/primary/document/vault/rss-2.jpg',
       })
       .mockResolvedValueOnce({
         fetchedAt: new Date(Date.now() - PODCAST_IMAGE_CACHE_TTL_MS - 60_000).toISOString(),
         imageUrl: 'https://cdn.example.com/old.jpg',
-        localImageUri: 'content://vault/.notebox/podcast-images/rss-3.jpg',
+        localImageUri: 'content://com.android.externalstorage.documents/tree/primary/document/vault/rss-3.jpg',
       });
 
     await expect(getCachedPodcastArtworkUri(baseUri, rssFeedUrl)).resolves.toBe(
-      'content://vault/.notebox/podcast-images/rss-2.jpg',
+      'content://com.android.externalstorage.documents/tree/primary/document/vault/rss-2.jpg',
     );
     await expect(getCachedPodcastArtworkUri(baseUri, rssFeedUrl)).resolves.toBeNull();
   });
@@ -111,11 +111,11 @@ describe('podcastImageCache', () => {
       ok: true,
     });
     writeImageFileMock.mockResolvedValueOnce(
-      'content://vault/.notebox/podcast-images/rss-local.png',
+      'content://com.android.externalstorage.documents/tree/primary/document/vault/rss-local.png',
     );
 
     await expect(getPodcastArtworkUri(baseUri, rssFeedUrl)).resolves.toBe(
-      'content://vault/.notebox/podcast-images/rss-local.png',
+      'content://com.android.externalstorage.documents/tree/primary/document/vault/rss-local.png',
     );
 
     expect(writeImageFileMock).toHaveBeenCalledWith(
@@ -130,7 +130,7 @@ describe('podcastImageCache', () => {
       getPodcastImageCacheKey(rssFeedUrl),
       expect.objectContaining({
         imageUrl: 'https://cdn.example.com/new-cover.png',
-        localImageUri: 'content://vault/.notebox/podcast-images/rss-local.png',
+        localImageUri: 'content://com.android.externalstorage.documents/tree/primary/document/vault/rss-local.png',
         mimeType: 'image/png',
       }),
     );

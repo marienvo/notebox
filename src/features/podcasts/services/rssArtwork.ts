@@ -5,6 +5,11 @@ const xmlParser = new XMLParser({
   ignoreAttributes: false,
 });
 const RSS_ARTWORK_RANGE_BYTES = 16 * 1024;
+// Channel-level metadata (including <itunes:image>) is always in the first few KB of
+// any well-formed RSS feed. Parsing 10 MB+ NPO feeds in Hermes causes silent OOM
+// failures. Cap to 64 KB — enough for feeds with long channel descriptions before the
+// image tag (some NPO feeds have multi-KB CDATA descriptions in the channel header).
+const RSS_PARSE_CAP_BYTES = 64 * 1024;
 
 type ParsedNode = Record<string, unknown>;
 
@@ -225,14 +230,12 @@ export async function fetchRssArtworkUrl(
         return null;
       }
 
-      const xml = await response.text();
+      const rawXml = await response.text();
+      const xml = rawXml.length > RSS_PARSE_CAP_BYTES ? rawXml.slice(0, RSS_PARSE_CAP_BYTES) : rawXml;
       const artworkUrl = parseRssArtworkUrl(xml);
       const hasPartialRange =
         response.status === 206 || Boolean(response.headers?.get?.('content-range'));
-      return {
-        artworkUrl,
-        hasPartialRange,
-      };
+      return {artworkUrl, hasPartialRange};
     } catch {
       return null;
     } finally {
