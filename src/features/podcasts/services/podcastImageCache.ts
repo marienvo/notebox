@@ -7,6 +7,7 @@ import {PodcastImageCacheEntry} from '../../../types';
 import {fetchRssArtworkUrl} from './rssArtwork';
 
 export const PODCAST_IMAGE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const PODCAST_IMAGE_REMOTE_FALLBACK_TTL_MS = 60 * 60 * 1000;
 const ARTWORK_DOWNLOAD_TIMEOUT_MS = 10000;
 const inFlightArtworkRequests = new Map<string, Promise<string | null>>();
 
@@ -16,7 +17,9 @@ function isEntryFresh(entry: PodcastImageCacheEntry): boolean {
     return false;
   }
 
-  return Date.now() - fetchedAt < PODCAST_IMAGE_CACHE_TTL_MS;
+  const hasLocalImage = Boolean(entry.localImageUri?.trim());
+  const ttlMs = hasLocalImage ? PODCAST_IMAGE_CACHE_TTL_MS : PODCAST_IMAGE_REMOTE_FALLBACK_TTL_MS;
+  return Date.now() - fetchedAt < ttlMs;
 }
 
 function getRenderableArtworkUri(entry: PodcastImageCacheEntry | null): string | null {

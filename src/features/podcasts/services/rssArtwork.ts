@@ -4,6 +4,7 @@ const xmlParser = new XMLParser({
   attributeNamePrefix: '@_',
   ignoreAttributes: false,
 });
+const RSS_ARTWORK_RANGE_BYTES = 16 * 1024;
 
 type ParsedNode = Record<string, unknown>;
 
@@ -208,25 +209,50 @@ export async function fetchRssArtworkUrl(
   rssFeedUrl: string,
   timeoutMs = 10000,
 ): Promise<string | null> {
-  const controller = new AbortController();
-  const timeoutHandle = setTimeout(() => {
-    controller.abort();
-  }, timeoutMs);
+  const fetchXml = async (headers?: Record<string, string>) => {
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
 
-  try {
-    const response = await fetch(rssFeedUrl, {
-      method: 'GET',
-      signal: controller.signal,
-    });
-    if (!response.ok) {
+    try {
+      const response = await fetch(rssFeedUrl, {
+        headers,
+        method: 'GET',
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        return null;
+      }
+
+      const xml = await response.text();
+      const artworkUrl = parseRssArtworkUrl(xml);
+      const hasPartialRange =
+        response.status === 206 || Boolean(response.headers?.get?.('content-range'));
+      return {
+        artworkUrl,
+        hasPartialRange,
+      };
+    } catch {
       return null;
+    } finally {
+      clearTimeout(timeoutHandle);
     }
+  };
 
-    const xml = await response.text();
-    return parseRssArtworkUrl(xml);
-  } catch {
+  const rangedResult = await fetchXml({
+    Range: `bytes=0-${RSS_ARTWORK_RANGE_BYTES - 1}`,
+  });
+  if (!rangedResult) {
     return null;
-  } finally {
-    clearTimeout(timeoutHandle);
   }
+  if (rangedResult.artworkUrl) {
+    return rangedResult.artworkUrl;
+  }
+  if (!rangedResult.hasPartialRange) {
+    return null;
+  }
+
+  const fullResult = await fetchXml();
+  return fullResult?.artworkUrl ?? null;
 }

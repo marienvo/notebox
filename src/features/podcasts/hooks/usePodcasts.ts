@@ -73,6 +73,16 @@ function extractRssPodcastTitle(fileName: string, content: string): string {
   return withoutExtension.replace(/^📻\s+/, '').trim();
 }
 
+function normalizeSeriesKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 function parseRssPodcastEpisodes(
   fileName: string,
   content: string,
@@ -150,6 +160,7 @@ export function usePodcasts(): UsePodcastsResult {
       );
 
       const rssBySeriesName = new Map<string, string>();
+      const rssByNormalizedSeriesName = new Map<string, string>();
       const legacyEpisodes: PodcastEpisode[] = [];
       const rssEpisodes: PodcastEpisode[] = [];
 
@@ -166,6 +177,10 @@ export function usePodcasts(): UsePodcastsResult {
         const sectionTitle = extractRssPodcastTitle(file.name, content);
         if (rssFeedUrl) {
           rssBySeriesName.set(sectionTitle, rssFeedUrl);
+          const normalizedSectionKey = normalizeSeriesKey(sectionTitle);
+          if (normalizedSectionKey) {
+            rssByNormalizedSeriesName.set(normalizedSectionKey, rssFeedUrl);
+          }
         }
         rssEpisodes.push(
           ...parseRssPodcastEpisodes(file.name, content, sectionTitle, rssFeedUrl),
@@ -174,7 +189,9 @@ export function usePodcasts(): UsePodcastsResult {
 
       const legacyEpisodesWithRss = legacyEpisodes.map(episode => ({
         ...episode,
-        rssFeedUrl: rssBySeriesName.get(episode.seriesName),
+        rssFeedUrl:
+          rssBySeriesName.get(episode.seriesName) ??
+          rssByNormalizedSeriesName.get(normalizeSeriesKey(episode.seriesName)),
       }));
 
       const dedupedEpisodes = new Map<string, PodcastEpisode>();
@@ -188,13 +205,25 @@ export function usePodcasts(): UsePodcastsResult {
         right.date.localeCompare(left.date),
       );
 
-      const nextSections = groupBySection(nextAllEpisodes.filter(episode => !episode.isListened))
-        .map(section => ({
-          ...section,
-          rssFeedUrl:
+      const nextSections = groupBySection(nextAllEpisodes.filter(episode => !episode.isListened)).map(
+        section => {
+          const rssFeedUrl =
             section.episodes.find(episode => episode.rssFeedUrl)?.rssFeedUrl ??
-            rssBySeriesName.get(section.title),
-        }));
+            rssBySeriesName.get(section.title) ??
+            rssByNormalizedSeriesName.get(normalizeSeriesKey(section.title));
+
+          if (!rssFeedUrl && section.episodes.length > 0) {
+            console.warn(
+              `[Podcasts] Missing rssFeedUrl for section "${section.title}". Artwork cannot be resolved.`,
+            );
+          }
+
+          return {
+            ...section,
+            rssFeedUrl,
+          };
+        },
+      );
 
       setAllEpisodes(nextAllEpisodes);
       setSections(nextSections);

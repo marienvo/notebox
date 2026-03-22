@@ -1,4 +1,4 @@
-import {useEffect} from 'react';
+import {useEffect, useState} from 'react';
 import {Box, Spinner, Text, useColorMode} from '@gluestack-ui/themed';
 import {Image, SectionList, StyleSheet, View} from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -7,8 +7,10 @@ import {useVaultContext} from '../../../core/vault/VaultContext';
 import {usePlayerContext} from '../context/PlayerContext';
 import {PodcastEpisode} from '../../../types';
 import {EpisodeRow} from '../components/EpisodeRow';
-import {usePodcastArtwork} from '../hooks/usePodcastArtwork';
-import {warmPodcastArtworkCache} from '../services/podcastImageCache';
+import {
+  getCachedPodcastArtworkUri,
+  getPodcastArtworkUri,
+} from '../services/podcastImageCache';
 
 type PodcastSectionListItem = {
   data: PodcastEpisode[];
@@ -17,21 +19,16 @@ type PodcastSectionListItem = {
 };
 
 type PodcastSectionHeaderProps = {
+  artworkUri: string | null;
   dividerColor: string;
-  rssFeedUrl?: string;
   title: string;
 };
 
 function PodcastSectionHeader({
+  artworkUri,
   dividerColor,
-  rssFeedUrl,
   title,
 }: PodcastSectionHeaderProps) {
-  const {baseUri} = useVaultContext();
-  const artworkUri = usePodcastArtwork(baseUri, rssFeedUrl, {
-    allowBackgroundFetch: false,
-  });
-
   return (
     <View style={[styles.sectionHeader, {borderBottomColor: dividerColor}]}>
       {artworkUri ? (
@@ -48,6 +45,7 @@ function PodcastSectionHeader({
 
 export function PodcastsScreen() {
   const {baseUri} = useVaultContext();
+  const [artworkByFeedUrl, setArtworkByFeedUrl] = useState<Record<string, string | null>>({});
   const {
     activeEpisode,
     markEpisodeAsPlayed,
@@ -71,6 +69,7 @@ export function PodcastsScreen() {
 
   useEffect(() => {
     if (!baseUri) {
+      setArtworkByFeedUrl({});
       return;
     }
 
@@ -82,18 +81,64 @@ export function PodcastsScreen() {
       }
     }
 
-    if (distinctFeedUrls.size === 0) {
+    const feedUrls = Array.from(distinctFeedUrls);
+    if (feedUrls.length === 0) {
+      setArtworkByFeedUrl({});
       return;
     }
 
-    const task = setTimeout(() => {
-      for (const feedUrl of distinctFeedUrls) {
-        warmPodcastArtworkCache(baseUri, feedUrl);
+    let isMounted = true;
+    const refreshArtwork = async () => {
+      const cachedEntries = await Promise.all(
+        feedUrls.map(async feedUrl => ({
+          feedUrl,
+          artworkUri: await getCachedPodcastArtworkUri(baseUri, feedUrl),
+        })),
+      );
+      if (!isMounted) {
+        return;
       }
-    }, 0);
+
+      setArtworkByFeedUrl(previousState => {
+        const nextState: Record<string, string | null> = {};
+        for (const feedUrl of feedUrls) {
+          nextState[feedUrl] = previousState[feedUrl] ?? null;
+        }
+        for (const entry of cachedEntries) {
+          nextState[entry.feedUrl] = entry.artworkUri;
+        }
+        return nextState;
+      });
+
+      for (const entry of cachedEntries) {
+        if (entry.artworkUri) {
+          continue;
+        }
+
+        getPodcastArtworkUri(baseUri, entry.feedUrl)
+          .then(fetchedArtworkUri => {
+            if (!isMounted) {
+              return;
+            }
+
+            setArtworkByFeedUrl(previousState => {
+              if (previousState[entry.feedUrl] === fetchedArtworkUri) {
+                return previousState;
+              }
+              return {
+                ...previousState,
+                [entry.feedUrl]: fetchedArtworkUri,
+              };
+            });
+          })
+          .catch(() => undefined);
+      }
+    };
+
+    refreshArtwork().catch(() => undefined);
 
     return () => {
-      clearTimeout(task);
+      isMounted = false;
     };
   }, [baseUri, sections]);
 
@@ -127,8 +172,12 @@ export function PodcastsScreen() {
         }}
         renderSectionHeader={({section}) => (
           <PodcastSectionHeader
+            artworkUri={
+              section.rssFeedUrl?.trim()
+                ? artworkByFeedUrl[section.rssFeedUrl.trim()] ?? null
+                : null
+            }
             dividerColor={dividerColor}
-            rssFeedUrl={section.rssFeedUrl}
             title={section.title}
           />
         )}

@@ -44,6 +44,24 @@ describe('fetchRssArtworkUrl', () => {
     );
   });
 
+  test('parses realistic Bureau Buitenland feed metadata', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+      <rss version="2.0"
+           xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
+           xmlns:media="http://search.yahoo.com/mrss/">
+        <channel>
+          <title>Bureau Buitenland</title>
+          <description><![CDATA[Wereldse achtergronden en analyses]]></description>
+          <itunes:image href="https://images.npo.nl/image/upload/v1738772223/bureau-buitenland.jpg" />
+          <media:thumbnail url="https://images.npo.nl/image/upload/v1738772223/bureau-buitenland-thumb.jpg" />
+        </channel>
+      </rss>`;
+
+    expect(parseRssArtworkUrl(xml)).toBe(
+      'https://images.npo.nl/image/upload/v1738772223/bureau-buitenland.jpg',
+    );
+  });
+
   test('falls back to channel image url when itunes:image is missing', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
@@ -114,5 +132,31 @@ describe('fetchRssArtworkUrl', () => {
 
     await expect(fetchRssArtworkUrl('https://feed.example.com/malformed.xml')).resolves.toBeNull();
     await expect(fetchRssArtworkUrl('https://feed.example.com/no-artwork.xml')).resolves.toBeNull();
+  });
+
+  test('falls back to full RSS fetch when range response is partial and missing artwork', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        headers: {get: (name: string) => (name === 'content-range' ? 'bytes 0-16383/64000' : null)},
+        ok: true,
+        status: 206,
+        text: async () => '<?xml version="1.0"?><rss><channel><title>Partial</title></channel></rss>',
+      })
+      .mockResolvedValueOnce({
+        headers: {get: () => null},
+        ok: true,
+        status: 200,
+        text: async () => `<?xml version="1.0"?>
+          <rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+            <channel>
+              <itunes:image href="https://cdn.example.com/full-cover.jpg" />
+            </channel>
+          </rss>`,
+      });
+
+    await expect(fetchRssArtworkUrl('https://feed.example.com/partial.xml')).resolves.toBe(
+      'https://cdn.example.com/full-cover.jpg',
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

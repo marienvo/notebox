@@ -3,6 +3,7 @@ import {
   getPodcastArtworkUri,
   getPodcastImageCacheKey,
   PODCAST_IMAGE_CACHE_TTL_MS,
+  PODCAST_IMAGE_REMOTE_FALLBACK_TTL_MS,
 } from '../src/features/podcasts/services/podcastImageCache';
 import {
   readPodcastImageCacheEntry,
@@ -75,6 +76,23 @@ describe('podcastImageCache', () => {
 
     await expect(getCachedPodcastArtworkUri(baseUri, rssFeedUrl)).resolves.toBe(
       'content://vault/.notebox/podcast-images/rss-2.jpg',
+    );
+    await expect(getCachedPodcastArtworkUri(baseUri, rssFeedUrl)).resolves.toBeNull();
+  });
+
+  test('expires remote-only fallback cache entries quickly for retry', async () => {
+    readCacheMock
+      .mockResolvedValueOnce({
+        fetchedAt: new Date(Date.now() - (PODCAST_IMAGE_REMOTE_FALLBACK_TTL_MS - 1_000)).toISOString(),
+        imageUrl: 'https://cdn.example.com/remote-fallback.jpg',
+      })
+      .mockResolvedValueOnce({
+        fetchedAt: new Date(Date.now() - (PODCAST_IMAGE_REMOTE_FALLBACK_TTL_MS + 1_000)).toISOString(),
+        imageUrl: 'https://cdn.example.com/remote-fallback.jpg',
+      });
+
+    await expect(getCachedPodcastArtworkUri(baseUri, rssFeedUrl)).resolves.toBe(
+      'https://cdn.example.com/remote-fallback.jpg',
     );
     await expect(getCachedPodcastArtworkUri(baseUri, rssFeedUrl)).resolves.toBeNull();
   });
