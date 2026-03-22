@@ -139,8 +139,11 @@ export function usePodcasts(): UsePodcastsResult {
 
     try {
       const files = await listGeneralMarkdownFiles(baseUri);
+      const podcastFiles = files.filter(
+        file => isPodcastFile(file.name) || RSS_PODCAST_FILE_PATTERN.test(file.name),
+      );
       const contentsByFile = await Promise.all(
-        files.map(async file => ({
+        podcastFiles.map(async file => ({
           content: await readPodcastFileContent(file.uri),
           file,
         })),

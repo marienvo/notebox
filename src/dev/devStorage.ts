@@ -35,7 +35,7 @@ function devNoteKey(noteName: string): string {
 }
 
 function devPodcastKey(fileName: string): string {
-  return `${DEV_STORAGE_PREFIX}:podcast:${fileName}`;
+  return `${DEV_STORAGE_PREFIX}:podcast:${encodeURIComponent(fileName)}`;
 }
 
 function devPodcastImageKey(cacheKey: string): string {
@@ -159,7 +159,7 @@ async function writePodcastIndex(index: PodcastIndex): Promise<void> {
 async function ensureSeeded(): Promise<void> {
   const seeded = await AsyncStorage.getItem(DEV_SEEDED_KEY);
 
-  if (seeded === '3') {
+  if (seeded === '4') {
     return;
   }
 
@@ -184,7 +184,7 @@ async function ensureSeeded(): Promise<void> {
   await writeNotesIndex(notesIndex);
   await writePodcastIndex(podcastIndex);
   await AsyncStorage.setItem(DEV_SETTINGS_KEY, serializeSettings(MOCK_SETTINGS));
-  await AsyncStorage.setItem(DEV_SEEDED_KEY, '3');
+  await AsyncStorage.setItem(DEV_SEEDED_KEY, '4');
 }
 
 function assertMockBaseUri(baseUri: string): void {
@@ -308,7 +308,7 @@ export async function listGeneralMarkdownFiles(
     )
     .map(name => ({
       lastModified: index[name] ?? null,
-      name,
+      name: name.split('/').pop() ?? name,
       uri: rootMarkdownUriFromName(name),
     }))
     .sort((left, right) => {
