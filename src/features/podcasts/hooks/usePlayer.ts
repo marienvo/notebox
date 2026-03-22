@@ -1,7 +1,6 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import {
-  clearPlaylist,
   readPlaylist,
   writePlaylist,
 } from '../../../core/storage/noteboxStorage';
@@ -122,7 +121,6 @@ export function usePlayer(
 
         const matchingEpisode = episodesById.get(saved.episodeId);
         if (!matchingEpisode) {
-          await clearPlaylist(baseUri);
           return;
         }
 
