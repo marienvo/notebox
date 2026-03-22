@@ -11,11 +11,16 @@ import {
 } from 'react-native-saf-x';
 
 import {
+  clearPlaylist,
   createNote,
+  listRootMarkdownFiles,
   listNotes,
   readNote,
+  readPlaylist,
+  readPodcastFileContent,
   initNotebox,
   readSettings,
+  writePlaylist,
   writeNoteContent,
   writeSettings,
 } from '../src/core/storage/noteboxStorage';
@@ -136,6 +141,43 @@ describe('noteboxStorage', () => {
     });
   });
 
+  test('listRootMarkdownFiles returns markdown files from vault root', async () => {
+    listFilesMock.mockResolvedValueOnce([
+      {
+        lastModified: 11,
+        name: '2026 Demo - podcasts.md',
+        type: 'file',
+        uri: `${baseUri}/2026 Demo - podcasts.md`,
+      },
+      {
+        lastModified: 22,
+        name: 'notes.txt',
+        type: 'file',
+        uri: `${baseUri}/notes.txt`,
+      },
+    ] as never);
+
+    await expect(listRootMarkdownFiles(baseUri)).resolves.toEqual([
+      {
+        lastModified: 11,
+        name: '2026 Demo - podcasts.md',
+        uri: `${baseUri}/2026 Demo - podcasts.md`,
+      },
+    ]);
+    expect(listFilesMock).toHaveBeenCalledWith(baseUri);
+  });
+
+  test('readPodcastFileContent reads markdown by URI', async () => {
+    readFileMock.mockResolvedValueOnce('# Podcasts');
+
+    await expect(readPodcastFileContent(`${baseUri}/2026 Demo - podcasts.md`)).resolves.toBe(
+      '# Podcasts',
+    );
+    expect(readFileMock).toHaveBeenCalledWith(`${baseUri}/2026 Demo - podcasts.md`, {
+      encoding: 'utf8',
+    });
+  });
+
   test('createNote sanitizes title and writes markdown content', async () => {
     existsMock.mockResolvedValueOnce(false);
     await expect(createNote(baseUri, ' Team Ideas! ', 'first line')).resolves.toMatchObject({
@@ -160,5 +202,48 @@ describe('noteboxStorage', () => {
       encoding: 'utf8',
       mimeType: 'text/markdown',
     });
+  });
+
+  test('writePlaylist writes playlist.json', async () => {
+    existsMock.mockResolvedValueOnce(true);
+
+    await writePlaylist(baseUri, {
+      durationMs: 1000,
+      episodeId: 'episode-a',
+      mp3Url: 'https://example.com/episode-a.mp3',
+      positionMs: 250,
+    });
+
+    expect(writeFileMock).toHaveBeenCalledWith(
+      `${baseUri}/.notebox/playlist.json`,
+      '{\n  "durationMs": 1000,\n  "episodeId": "episode-a",\n  "mp3Url": "https://example.com/episode-a.mp3",\n  "positionMs": 250\n}\n',
+      {encoding: 'utf8', mimeType: 'application/json'},
+    );
+  });
+
+  test('readPlaylist returns parsed playlist entry', async () => {
+    existsMock.mockResolvedValueOnce(true);
+    readFileMock.mockResolvedValueOnce(
+      '{"durationMs":1000,"episodeId":"episode-a","mp3Url":"https://example.com/episode-a.mp3","positionMs":250}',
+    );
+
+    await expect(readPlaylist(baseUri)).resolves.toEqual({
+      durationMs: 1000,
+      episodeId: 'episode-a',
+      mp3Url: 'https://example.com/episode-a.mp3',
+      positionMs: 250,
+    });
+  });
+
+  test('clearPlaylist empties existing playlist file', async () => {
+    existsMock.mockResolvedValueOnce(true);
+
+    await clearPlaylist(baseUri);
+
+    expect(writeFileMock).toHaveBeenCalledWith(
+      `${baseUri}/.notebox/playlist.json`,
+      '',
+      {encoding: 'utf8', mimeType: 'application/json'},
+    );
   });
 });

@@ -33,7 +33,7 @@
     "react-native-saf-x": "^2.2.3",
     "react-native-safe-area-context": "^5.7.0",
     "react-native-screens": "^4.24.0",
-    "react-native-track-player": "^4.1.2",
+    "react-native-track-player": "^5.0.0-alpha0",
     "react-native-vector-icons": "^10.3.0"
   },
   "devDependencies": {

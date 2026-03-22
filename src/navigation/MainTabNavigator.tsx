@@ -1,9 +1,15 @@
-import {BottomTabNavigationOptions, createBottomTabNavigator} from '@react-navigation/bottom-tabs';
+import {
+  BottomTabBar,
+  BottomTabNavigationOptions,
+  createBottomTabNavigator,
+} from '@react-navigation/bottom-tabs';
 import {createStackNavigator} from '@react-navigation/stack';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 import {HomeScreen} from '../features/home/screens/HomeScreen';
 import {InboxScreen} from '../features/inbox/screens/InboxScreen';
+import {MiniPlayer} from '../features/podcasts/components/MiniPlayer';
+import {PlayerProvider} from '../features/podcasts/context/PlayerContext';
 import {PodcastsScreen} from '../features/podcasts/screens/PodcastsScreen';
 import {SettingsScreen} from '../features/settings/screens/SettingsScreen';
 import {NoteDetailScreen} from '../features/vault/screens/NoteDetailScreen';
@@ -37,6 +43,13 @@ const vaultTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) =
 );
 const settingsTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
   <MaterialIcons color={color} name="settings" size={size} />
+);
+
+const renderTabBar = (props: Parameters<typeof BottomTabBar>[0]) => (
+  <>
+    <MiniPlayer />
+    <BottomTabBar {...props} />
+  </>
 );
 
 function InboxStackScreen() {
@@ -82,47 +95,51 @@ function SettingsStackScreen() {
 
 export function MainTabNavigator() {
   return (
-    <Tabs.Navigator initialRouteName="HomeTab">
-      <Tabs.Screen
-        component={InboxStackScreen}
-        name="InboxTab"
-        options={{
-          tabBarIcon: inboxTabIcon,
-          title: 'Inbox',
-        }}
-      />
-      <Tabs.Screen
-        component={PodcastsStackScreen}
-        name="PodcastsTab"
-        options={{
-          tabBarIcon: podcastsTabIcon,
-          title: 'Podcasts',
-        }}
-      />
-      <Tabs.Screen
-        component={HomeStackScreen}
-        name="HomeTab"
-        options={{
-          tabBarIcon: homeTabIcon,
-          title: 'Home',
-        }}
-      />
-      <Tabs.Screen
-        component={VaultStackScreen}
-        name="VaultTab"
-        options={{
-          tabBarIcon: vaultTabIcon,
-          title: 'Vault',
-        }}
-      />
-      <Tabs.Screen
-        component={SettingsStackScreen}
-        name="SettingsTab"
-        options={{
-          tabBarIcon: settingsTabIcon,
-          title: 'Settings',
-        }}
-      />
-    </Tabs.Navigator>
+    <PlayerProvider>
+      <Tabs.Navigator
+        initialRouteName="HomeTab"
+        tabBar={renderTabBar}>
+        <Tabs.Screen
+          component={InboxStackScreen}
+          name="InboxTab"
+          options={{
+            tabBarIcon: inboxTabIcon,
+            title: 'Inbox',
+          }}
+        />
+        <Tabs.Screen
+          component={PodcastsStackScreen}
+          name="PodcastsTab"
+          options={{
+            tabBarIcon: podcastsTabIcon,
+            title: 'Podcasts',
+          }}
+        />
+        <Tabs.Screen
+          component={HomeStackScreen}
+          name="HomeTab"
+          options={{
+            tabBarIcon: homeTabIcon,
+            title: 'Home',
+          }}
+        />
+        <Tabs.Screen
+          component={VaultStackScreen}
+          name="VaultTab"
+          options={{
+            tabBarIcon: vaultTabIcon,
+            title: 'Vault',
+          }}
+        />
+        <Tabs.Screen
+          component={SettingsStackScreen}
+          name="SettingsTab"
+          options={{
+            tabBarIcon: settingsTabIcon,
+            title: 'Settings',
+          }}
+        />
+      </Tabs.Navigator>
+    </PlayerProvider>
   );
 }

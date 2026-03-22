@@ -58,21 +58,19 @@ Mitigation:
 - Mention hidden-folder behavior in README.
 - Rely on in-app read/write confirmation as ground truth.
 
-## 6) react-native-track-player incompatible with New Architecture (High — active blocker)
+## 6) react-native-track-player on New Architecture (Medium — mitigated with alpha)
 
 Risk:
 
-- `react-native-track-player@4.1.2` crashes the app on startup when running under RN 0.84 with New Architecture enabled.
-- Root cause (confirmed via logcat): the TurboModule interop layer fails to parse `@ReactMethod` annotations because the module has synchronous methods with non-void return types. This violates the TurboModule contract: `TurboModule system assumes returnType == void iff the method is synchronous`.
-- The crash produces `SIGABRT` before any UI renders.
+- `react-native-track-player@5.0.0-alpha0` resolves the New Architecture parsing crash from v4, but it is still an alpha release.
+- Alpha-specific regressions are possible, especially around remote controls and notification actions.
 
-Mitigation (active):
+Mitigation:
 
-- `react-native-track-player` is intentionally **not imported anywhere in the JS bundle**.
-- The npm package remains installed for future use, but all JS imports and `registerPlaybackService` calls have been removed from `index.js` and `PodcastsScreen.tsx`.
-- The Podcasts tab shows a static placeholder until a New Architecture-compatible version is available.
+- Audio calls are isolated behind an adapter layer: `AudioPlayer` interface in `src/features/podcasts/services/audioPlayer.ts` and `TrackPlayerAdapter` in `src/features/podcasts/services/trackPlayerAdapter.ts`.
+- If a future release regresses, only the adapter needs to change and the hooks/UI remain untouched.
+- Keep smoke-testing background play, lock screen controls, and pause/resume on a physical Android device before releases.
 
-Required before re-integrating:
+Contingency:
 
-- Verify that the new version of `react-native-track-player` ships a proper TurboModule spec and passes `TurboModuleInteropUtils` parsing.
-- Test on a physical device before adding any player UI.
+- If track-player alpha becomes unstable on target devices, switch the adapter implementation to a temporary in-app-only backend (for example `react-native-video`) while preserving app-level APIs.

@@ -6,10 +6,17 @@ import {
   writeFile,
 } from 'react-native-saf-x';
 
-import {NoteDetail, NoteSummary, NoteboxSettings} from '../../types';
+import {
+  NoteDetail,
+  NoteSummary,
+  NoteboxSettings,
+  PlaylistEntry,
+  RootMarkdownFile,
+} from '../../types';
 
 const NOTEBOX_DIRECTORY_NAME = '.notebox';
 const INBOX_DIRECTORY_NAME = 'Inbox';
+const PLAYLIST_FILE_NAME = 'playlist.json';
 const SETTINGS_FILE_NAME = 'settings.json';
 const MARKDOWN_EXTENSION = '.md';
 
@@ -31,6 +38,10 @@ function getNoteboxDirectoryUri(baseUri: string): string {
 
 function getSettingsUri(baseUri: string): string {
   return `${getNoteboxDirectoryUri(baseUri)}/${SETTINGS_FILE_NAME}`;
+}
+
+function getPlaylistUri(baseUri: string): string {
+  return `${getNoteboxDirectoryUri(baseUri)}/${PLAYLIST_FILE_NAME}`;
 }
 
 function getInboxDirectoryUri(baseUri: string): string {
@@ -61,6 +72,10 @@ function serializeSettings(settings: NoteboxSettings): string {
   return `${JSON.stringify(settings, null, 2)}\n`;
 }
 
+function serializePlaylist(entry: PlaylistEntry): string {
+  return `${JSON.stringify(entry, null, 2)}\n`;
+}
+
 function sanitizeFileName(rawName: string): string {
   const normalized = rawName
     .trim()
@@ -87,6 +102,23 @@ type SafDocumentFile = {
   type?: 'directory' | 'file' | string;
   uri: string;
 };
+
+function isValidPlaylistEntry(value: unknown): value is PlaylistEntry {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const entry = value as Partial<PlaylistEntry>;
+  const isDurationValid =
+    entry.durationMs === null || typeof entry.durationMs === 'number';
+
+  return (
+    typeof entry.episodeId === 'string' &&
+    typeof entry.mp3Url === 'string' &&
+    typeof entry.positionMs === 'number' &&
+    isDurationValid
+  );
+}
 
 function parseSettings(rawSettings: string): NoteboxSettings {
   const parsed = JSON.parse(rawSettings) as Partial<NoteboxSettings>;
@@ -194,6 +226,39 @@ export async function listNotes(baseUri: string): Promise<NoteSummary[]> {
     });
 }
 
+export async function listRootMarkdownFiles(
+  baseUri: string,
+): Promise<RootMarkdownFile[]> {
+  if (isDevMockVaultEnabled) {
+    const devStorage = getDevStorage();
+    return devStorage.listRootMarkdownFiles(baseUri);
+  }
+
+  const normalizedBaseUri = normalizeBaseUri(baseUri);
+  const documents = (await listFiles(normalizedBaseUri)) as SafDocumentFile[];
+
+  return documents
+    .filter(document => {
+      const isFile = document.type === 'file' || document.type === undefined;
+      return (
+        isFile &&
+        typeof document.name === 'string' &&
+        document.name.endsWith(MARKDOWN_EXTENSION)
+      );
+    })
+    .map(document => ({
+      lastModified:
+        typeof document.lastModified === 'number' ? document.lastModified : null,
+      name: document.name as string,
+      uri: document.uri,
+    }))
+    .sort((a, b) => {
+      const left = a.lastModified ?? 0;
+      const right = b.lastModified ?? 0;
+      return right - left;
+    });
+}
+
 export async function readNote(noteUri: string): Promise<NoteDetail> {
   if (isDevMockVaultEnabled) {
     const devStorage = getDevStorage();
@@ -211,6 +276,16 @@ export async function readNote(noteUri: string): Promise<NoteDetail> {
   };
 
   return {content, summary};
+}
+
+export async function readPodcastFileContent(fileUri: string): Promise<string> {
+  if (isDevMockVaultEnabled) {
+    const devStorage = getDevStorage();
+    return devStorage.readPodcastFileContent(fileUri);
+  }
+
+  const normalizedFileUri = normalizeNoteUri(fileUri);
+  return readFile(normalizedFileUri, {encoding: 'utf8'});
 }
 
 export async function createNote(
@@ -263,6 +338,76 @@ export async function writeNoteContent(
   await writeFile(normalizedNoteUri, noteBody, {
     encoding: 'utf8',
     mimeType: 'text/markdown',
+  });
+}
+
+export async function readPlaylist(baseUri: string): Promise<PlaylistEntry | null> {
+  if (isDevMockVaultEnabled) {
+    const devStorage = getDevStorage();
+    return devStorage.readPlaylist(baseUri);
+  }
+
+  const normalizedBaseUri = normalizeBaseUri(baseUri);
+  const playlistUri = getPlaylistUri(normalizedBaseUri);
+
+  if (!(await exists(playlistUri))) {
+    return null;
+  }
+
+  const rawPlaylist = await readFile(playlistUri, {encoding: 'utf8'});
+  if (!rawPlaylist.trim()) {
+    return null;
+  }
+  const parsed = JSON.parse(rawPlaylist) as unknown;
+
+  if (!isValidPlaylistEntry(parsed)) {
+    throw new Error('playlist.json has an invalid structure.');
+  }
+
+  return parsed;
+}
+
+export async function writePlaylist(
+  baseUri: string,
+  entry: PlaylistEntry,
+): Promise<void> {
+  if (isDevMockVaultEnabled) {
+    const devStorage = getDevStorage();
+    await devStorage.writePlaylist(baseUri, entry);
+    return;
+  }
+
+  const normalizedBaseUri = normalizeBaseUri(baseUri);
+  const noteboxDirectoryUri = getNoteboxDirectoryUri(normalizedBaseUri);
+  const playlistUri = getPlaylistUri(normalizedBaseUri);
+
+  if (!(await exists(noteboxDirectoryUri))) {
+    await mkdir(noteboxDirectoryUri);
+  }
+
+  await writeFile(playlistUri, serializePlaylist(entry), {
+    encoding: 'utf8',
+    mimeType: 'application/json',
+  });
+}
+
+export async function clearPlaylist(baseUri: string): Promise<void> {
+  if (isDevMockVaultEnabled) {
+    const devStorage = getDevStorage();
+    await devStorage.clearPlaylist(baseUri);
+    return;
+  }
+
+  const normalizedBaseUri = normalizeBaseUri(baseUri);
+  const playlistUri = getPlaylistUri(normalizedBaseUri);
+
+  if (!(await exists(playlistUri))) {
+    return;
+  }
+
+  await writeFile(playlistUri, '', {
+    encoding: 'utf8',
+    mimeType: 'application/json',
   });
 }
 

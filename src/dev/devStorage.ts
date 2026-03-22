@@ -1,20 +1,38 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import {NoteDetail, NoteSummary, NoteboxSettings} from '../types';
+import {
+  NoteDetail,
+  NoteSummary,
+  NoteboxSettings,
+  PlaylistEntry,
+  RootMarkdownFile,
+} from '../types';
 import {NOTES_DIRECTORY_URI_KEY} from '../core/storage/keys';
-import {DEV_MOCK_VAULT_URI, MOCK_NOTES, MOCK_SETTINGS} from './mockVaultData';
+import {
+  DEV_MOCK_VAULT_URI,
+  MOCK_NOTES,
+  MOCK_PODCAST_FILES,
+  MOCK_SETTINGS,
+} from './mockVaultData';
 
 const DEV_STORAGE_PREFIX = '@notebox_dev';
 const DEV_SEEDED_KEY = `${DEV_STORAGE_PREFIX}:seeded`;
 const DEV_SETTINGS_KEY = `${DEV_STORAGE_PREFIX}:settings`;
 const DEV_NOTES_INDEX_KEY = `${DEV_STORAGE_PREFIX}:notes:index`;
+const DEV_PODCAST_INDEX_KEY = `${DEV_STORAGE_PREFIX}:podcasts:index`;
+const DEV_PLAYLIST_KEY = `${DEV_STORAGE_PREFIX}:playlist`;
 const INBOX_DIRECTORY_NAME = 'Inbox';
 const MARKDOWN_EXTENSION = '.md';
 
 type NotesIndex = Record<string, number>;
+type PodcastIndex = Record<string, number>;
 
 function devNoteKey(noteName: string): string {
   return `${DEV_STORAGE_PREFIX}:note:${noteName}`;
+}
+
+function devPodcastKey(fileName: string): string {
+  return `${DEV_STORAGE_PREFIX}:podcast:${fileName}`;
 }
 
 function normalizeBaseUri(baseUri: string): string {
@@ -71,6 +89,10 @@ function noteUriFromName(noteName: string): string {
   return `${DEV_MOCK_VAULT_URI}/${noteName}`;
 }
 
+function rootMarkdownUriFromName(fileName: string): string {
+  return `${DEV_MOCK_VAULT_URI}/${fileName}`;
+}
+
 function inInboxPath(fileName: string): string {
   return `${INBOX_DIRECTORY_NAME}/${fileName}`;
 }
@@ -112,6 +134,21 @@ async function writeNotesIndex(index: NotesIndex): Promise<void> {
   await AsyncStorage.setItem(DEV_NOTES_INDEX_KEY, JSON.stringify(index));
 }
 
+async function readPodcastIndex(): Promise<PodcastIndex> {
+  const rawIndex = await AsyncStorage.getItem(DEV_PODCAST_INDEX_KEY);
+
+  if (!rawIndex) {
+    return {};
+  }
+
+  const parsed = JSON.parse(rawIndex) as PodcastIndex;
+  return parsed ?? {};
+}
+
+async function writePodcastIndex(index: PodcastIndex): Promise<void> {
+  await AsyncStorage.setItem(DEV_PODCAST_INDEX_KEY, JSON.stringify(index));
+}
+
 async function ensureSeeded(): Promise<void> {
   const seeded = await AsyncStorage.getItem(DEV_SEEDED_KEY);
 
@@ -121,6 +158,7 @@ async function ensureSeeded(): Promise<void> {
 
   const timestamp = Date.now();
   const notesIndex: NotesIndex = {};
+  const podcastIndex: PodcastIndex = {};
 
   for (const note of MOCK_NOTES) {
     const inboxNoteName = inInboxPath(note.name);
@@ -128,7 +166,16 @@ async function ensureSeeded(): Promise<void> {
     await AsyncStorage.setItem(devNoteKey(inboxNoteName), note.content);
   }
 
+  for (const podcastFile of MOCK_PODCAST_FILES) {
+    podcastIndex[podcastFile.name] = timestamp;
+    await AsyncStorage.setItem(
+      devPodcastKey(podcastFile.name),
+      normalizeNoteContent(podcastFile.content),
+    );
+  }
+
   await writeNotesIndex(notesIndex);
+  await writePodcastIndex(podcastIndex);
   await AsyncStorage.setItem(DEV_SETTINGS_KEY, serializeSettings(MOCK_SETTINGS));
   await AsyncStorage.setItem(DEV_SEEDED_KEY, '1');
 }
@@ -238,6 +285,40 @@ export async function readNote(noteUri: string): Promise<NoteDetail> {
   };
 }
 
+export async function listRootMarkdownFiles(
+  baseUri: string,
+): Promise<RootMarkdownFile[]> {
+  assertMockBaseUri(baseUri);
+  await ensureSeeded();
+
+  const index = await readPodcastIndex();
+
+  return Object.keys(index)
+    .filter(name => name.endsWith(MARKDOWN_EXTENSION))
+    .map(name => ({
+      lastModified: index[name] ?? null,
+      name,
+      uri: rootMarkdownUriFromName(name),
+    }))
+    .sort((left, right) => {
+      const leftValue = left.lastModified ?? 0;
+      const rightValue = right.lastModified ?? 0;
+      return rightValue - leftValue;
+    });
+}
+
+export async function readPodcastFileContent(fileUri: string): Promise<string> {
+  await ensureSeeded();
+  const fileName = noteNameFromUri(fileUri);
+  const content = await AsyncStorage.getItem(devPodcastKey(fileName));
+
+  if (content === null) {
+    throw new Error('Podcast file was not found in dev mock vault.');
+  }
+
+  return content;
+}
+
 export async function createNote(
   baseUri: string,
   title: string,
@@ -283,4 +364,33 @@ export async function writeNoteContent(
   await AsyncStorage.setItem(devNoteKey(fileName), `${content}\n`);
   index[fileName] = Date.now();
   await writeNotesIndex(index);
+}
+
+export async function readPlaylist(baseUri: string): Promise<PlaylistEntry | null> {
+  assertMockBaseUri(baseUri);
+  await ensureSeeded();
+
+  const rawPlaylist = await AsyncStorage.getItem(DEV_PLAYLIST_KEY);
+  if (!rawPlaylist) {
+    return null;
+  }
+
+  return JSON.parse(rawPlaylist) as PlaylistEntry;
+}
+
+export async function writePlaylist(
+  baseUri: string,
+  entry: PlaylistEntry,
+): Promise<void> {
+  assertMockBaseUri(baseUri);
+  await ensureSeeded();
+
+  await AsyncStorage.setItem(DEV_PLAYLIST_KEY, JSON.stringify(entry));
+}
+
+export async function clearPlaylist(baseUri: string): Promise<void> {
+  assertMockBaseUri(baseUri);
+  await ensureSeeded();
+
+  await AsyncStorage.removeItem(DEV_PLAYLIST_KEY);
 }
