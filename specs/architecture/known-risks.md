@@ -77,11 +77,17 @@ Contingency:
 
 ## 7) Android native vault listing (`NoteboxVaultListing`) (Medium)
 
-Risk:
+### Why this exists (rationale)
 
-- Custom Kotlin module [`VaultListingModule`](android/app/src/main/java/com/notebox/VaultListingModule.kt) lists `.md` files under a SAF directory URI on a background executor. Wrong URI handling or `DocumentFile` behavior on some OEMs could return empty lists or diverge from the JS/`react-native-saf-x` path.
+- React Native handles interaction and React updates on a **single JavaScript thread**. Listing a large SAF folder via `react-native-saf-x` is async at the native I/O layer, but when results arrive the bridge still delivers a large payload to JS, where **filtering, sorting, and building state** run synchronously and can stack with other startup work (for example podcast refresh). That showed up as **jank or short freezes** when switching to Vault or Podcasts soon after cold boot.
+- The Kotlin module [`VaultListingModule`](android/app/src/main/java/com/notebox/VaultListingModule.kt) was added to move **directory enumeration plus markdown filtering and sorting** onto a **background executor** and return a **small, already-filtered** list to JS when the Android `DocumentFile` APIs cooperate with our directory URIs. The goal is to **reduce long synchronous bursts on the JS thread** after listing, not to replace SAF or duplicate all app logic in native.
+- **Important:** `androidx.documentfile.provider.DocumentFile` and `react-native-saf-x` do not always agree on the same URI strings (tree vs document URIs, OEM quirks). So native listing is **best-effort**; correctness for listing always remains available through the existing JS path (`exists`, `listFiles`, same filters as in [`noteboxStorage.ts`](src/core/storage/noteboxStorage.ts)).
 
-Mitigation:
+### Risk
+
+- Wrong URI handling or `DocumentFile` behavior on some OEMs can return empty lists or diverge from the JS/`react-native-saf-x` path.
+
+### Mitigation
 
 - JavaScript falls back to `exists` + `listFiles` + filter in [`noteboxStorage.ts`](src/core/storage/noteboxStorage.ts) when `tryListMarkdownFilesNative` returns `null` (non-Android, missing module, or thrown error from native).
 - If native resolves with an **empty array** but `exists(directoryUri)` is still **true** for the SAF path, the app **does not** trust the empty native result and runs the same JS listing path (native and `react-native-saf-x` can disagree on visibility).

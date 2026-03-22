@@ -19,7 +19,7 @@ This spec defines how the Podcasts screen loads data, when the small initial spi
 - `podcastImageCache`: resolves artwork URI through memory cache, persistent cache, SAF metadata, and optional network fallback.
 - `rssFeedUrlCache`: holds RSS feed URL maps per vault and persists them to `AsyncStorage`.
 - `generalPodcastMarkdownIndexCache`: persists a **small** snapshot of podcast-relevant files under `General` (legacy `*- podcasts.md` and `📻 … .md` only) so cold starts avoid `listFiles` over tens of thousands of unrelated markdown files.
-- **Android:** `listGeneralMarkdownFiles` (and Inbox `listNotes`) can use the `NoteboxVaultListing` Kotlin module for directory listing and filtering on a background thread, with fallback to `react-native-saf-x` in JS when needed; see `specs/architecture/known-risks.md` section 7.
+- **Android:** `listGeneralMarkdownFiles` (and Inbox `listNotes`) may call `NoteboxVaultListing` so **SAF directory listing and markdown filtering run off the JS thread** when `DocumentFile` accepts the same directory URIs as `react-native-saf-x`. If native fails, returns empty while SAF says the folder exists, or is skipped, listing uses the existing JS path (`exists`, `listFiles`, filters in [`noteboxStorage.ts`](../../src/core/storage/noteboxStorage.ts)). **Rationale:** reduce cold-start jank from large `listFiles` results being processed on the single JS thread alongside podcast load; see [architecture / known-risks](../architecture/known-risks.md) section 7.
 
 ## Cache Layers
 
