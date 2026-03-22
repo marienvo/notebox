@@ -4,12 +4,13 @@ import {Image, StyleSheet, View} from 'react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
+import {useVaultContext} from '../../../core/vault/VaultContext';
 import {PodcastEpisode} from '../../../types';
+import {usePodcastArtwork} from '../hooks/usePodcastArtwork';
 import {PlayerState} from '../services/audioPlayer';
 
 type EpisodeRowProps = {
   activeEpisodeId: string | null;
-  artworkUri: string | null;
   dividerColor: string;
   episode: PodcastEpisode;
   mutedTextColor: string;
@@ -21,7 +22,6 @@ type EpisodeRowProps = {
 
 export function EpisodeRow({
   activeEpisodeId,
-  artworkUri,
   dividerColor,
   episode,
   mutedTextColor,
@@ -30,6 +30,8 @@ export function EpisodeRow({
   playbackLoading,
   playbackState,
 }: EpisodeRowProps) {
+  const {baseUri} = useVaultContext();
+  const artworkUri = usePodcastArtwork(baseUri, episode.rssFeedUrl);
   const swipeableRef = useRef<Swipeable | null>(null);
   const [isMarkingAsPlayed, setIsMarkingAsPlayed] = useState(false);
   const isActive = activeEpisodeId === episode.id;
