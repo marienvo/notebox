@@ -157,6 +157,22 @@ function getRssChannel(xml: string): ParsedNode | null {
   return atomFeed;
 }
 
+function getChannelSection(xml: string): string {
+  const itemOrEntryMatch = /<item[\s>]|<entry[\s>]/i.exec(xml);
+  if (!itemOrEntryMatch) {
+    return xml.length > RSS_PARSE_CAP_BYTES ? xml.slice(0, RSS_PARSE_CAP_BYTES) : xml;
+  }
+
+  const channelSection = xml.slice(0, itemOrEntryMatch.index);
+  const openingChunk = channelSection.slice(0, 512);
+  const isAtomFeed = /<feed[\s>]/i.test(openingChunk);
+  if (isAtomFeed) {
+    return `${channelSection}\n</feed>`;
+  }
+
+  return `${channelSection}\n</channel></rss>`;
+}
+
 function resolveChannelImageUrl(channel: ParsedNode): string | null {
   const directImageSources: Array<string | null> = [
     getFirstAttributeValue(channel['itunes:image'], '@_href'),
@@ -199,7 +215,7 @@ export function parseRssArtworkUrl(xml: string): string | null {
       return null;
     }
 
-    const channel = getRssChannel(xml);
+    const channel = getRssChannel(getChannelSection(xml));
     if (!channel) {
       return null;
     }
@@ -231,8 +247,7 @@ export async function fetchRssArtworkUrl(
       }
 
       const rawXml = await response.text();
-      const xml = rawXml.length > RSS_PARSE_CAP_BYTES ? rawXml.slice(0, RSS_PARSE_CAP_BYTES) : rawXml;
-      const artworkUrl = parseRssArtworkUrl(xml);
+      const artworkUrl = parseRssArtworkUrl(rawXml);
       const hasPartialRange =
         response.status === 206 || Boolean(response.headers?.get?.('content-range'));
       return {artworkUrl, hasPartialRange};
