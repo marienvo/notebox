@@ -1,5 +1,9 @@
 # Notebox MVP: Recommendation and Stack
 
+## Platform targets
+
+Mobile shipping target is **Android only**. **iOS / iPhone is permanently out of scope.** A future **desktop app for Linux (Fedora / GNOME)** is a separate, later possibility. Authoritative wording lives in [`platform-targets.md`](platform-targets.md).
+
 ## Recommendation summary
 
 Stay with bare React Native CLI for this MVP.
@@ -47,7 +51,7 @@ This lowers integration risk and keeps the implementation simple.
 
 ## Recommended stack
 
-- React Native CLI + TypeScript (Android-first, bare project)
+- React Native CLI + TypeScript (Android-only mobile target, bare project)
 - `react-native-saf-x` (SAF directory selection + URI file operations)
 - `@react-native-async-storage/async-storage` (persist selected URI only)
 - `@react-navigation/native` + `@react-navigation/stack` + `@react-navigation/bottom-tabs` (setup gate + 5-tab shell)
