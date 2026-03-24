@@ -6,6 +6,7 @@ import {
   writeFile,
 } from 'react-native-saf-x';
 
+import {tryListMarkdownFilesNative} from './androidVaultListing';
 import {
   NoteDetail,
   NoteSummary,
@@ -21,6 +22,7 @@ const INBOX_DIRECTORY_NAME = 'Inbox';
 const PLAYLIST_FILE_NAME = 'playlist.json';
 const PODCAST_IMAGES_DIRECTORY_NAME = 'podcast-images';
 const SETTINGS_FILE_NAME = 'settings.json';
+const INBOX_INDEX_FILE_NAME = 'Inbox.md';
 const MARKDOWN_EXTENSION = '.md';
 const SYNC_CONFLICT_MARKER = 'sync-conflict';
 
@@ -112,12 +114,25 @@ function sanitizeFileName(rawName: string): string {
   return normalized || `note-${Date.now()}`;
 }
 
-function titleFromNoteName(fileName: string): string {
-  const baseName = fileName.endsWith(MARKDOWN_EXTENSION)
+function stemFromMarkdownFileName(fileName: string): string {
+  return fileName.endsWith(MARKDOWN_EXTENSION)
     ? fileName.slice(0, -MARKDOWN_EXTENSION.length)
     : fileName;
+}
+
+function titleFromNoteName(fileName: string): string {
+  const baseName = stemFromMarkdownFileName(fileName);
 
   return baseName.replace(/[-_]+/g, ' ').trim() || 'Untitled note';
+}
+
+/** Builds the full body for `General/Inbox.md` from Inbox markdown basenames (e.g. `note.md`). */
+export function buildInboxMarkdownIndexContent(markdownBasenames: string[]): string {
+  const stems = markdownBasenames.map(name => stemFromMarkdownFileName(name)).sort((a, b) => {
+    return a.localeCompare(b);
+  });
+  const lines = ['# Inbox', '', ...stems.map(stem => `- [[Inbox/${stem}|${stem}]]`)];
+  return `${lines.join('\n')}\n`;
 }
 
 function isSyncConflictFileName(fileName: string): boolean {
@@ -130,6 +145,49 @@ type SafDocumentFile = {
   type?: 'directory' | 'file' | string;
   uri: string;
 };
+
+async function listMarkdownFilesInDirectory(
+  directoryUri: string,
+): Promise<Array<{lastModified: number | null; name: string; uri: string}>> {
+  const fromNative = await tryListMarkdownFilesNative(directoryUri);
+  if (fromNative !== null && fromNative.length > 0) {
+    return fromNative;
+  }
+  if (fromNative !== null && fromNative.length === 0) {
+    if (!(await exists(directoryUri))) {
+      return [];
+    }
+    // Native returned empty but SAF says the directory exists — use JS listing.
+  }
+
+  if (!(await exists(directoryUri))) {
+    return [];
+  }
+
+  const documents = (await listFiles(directoryUri)) as SafDocumentFile[];
+
+  return documents
+    .filter(document => {
+      const isFile = document.type === 'file' || document.type === undefined;
+      return (
+        isFile &&
+        typeof document.name === 'string' &&
+        document.name.endsWith(MARKDOWN_EXTENSION) &&
+        !isSyncConflictFileName(document.name)
+      );
+    })
+    .map(document => ({
+      lastModified:
+        typeof document.lastModified === 'number' ? document.lastModified : null,
+      name: document.name as string,
+      uri: document.uri,
+    }))
+    .sort((a, b) => {
+      const left = a.lastModified ?? 0;
+      const right = b.lastModified ?? 0;
+      return right - left;
+    });
+}
 
 function isValidPlaylistEntry(value: unknown): value is PlaylistEntry {
   if (typeof value !== 'object' || value === null) {
@@ -247,33 +305,7 @@ export async function listNotes(baseUri: string): Promise<NoteSummary[]> {
   const normalizedBaseUri = normalizeBaseUri(baseUri);
   const inboxDirectoryUri = getInboxDirectoryUri(normalizedBaseUri);
 
-  if (!(await exists(inboxDirectoryUri))) {
-    return [];
-  }
-
-  const documents = (await listFiles(inboxDirectoryUri)) as SafDocumentFile[];
-
-  return documents
-    .filter(document => {
-      const isFile = document.type === 'file' || document.type === undefined;
-      return (
-        isFile &&
-        typeof document.name === 'string' &&
-        document.name.endsWith(MARKDOWN_EXTENSION) &&
-        !isSyncConflictFileName(document.name)
-      );
-    })
-    .map(document => ({
-      lastModified:
-        typeof document.lastModified === 'number' ? document.lastModified : null,
-      name: document.name as string,
-      uri: document.uri,
-    }))
-    .sort((a, b) => {
-      const left = a.lastModified ?? 0;
-      const right = b.lastModified ?? 0;
-      return right - left;
-    });
+  return listMarkdownFilesInDirectory(inboxDirectoryUri);
 }
 
 export async function listGeneralMarkdownFiles(
@@ -287,33 +319,39 @@ export async function listGeneralMarkdownFiles(
   const normalizedBaseUri = normalizeBaseUri(baseUri);
   const generalDirectoryUri = getGeneralDirectoryUri(normalizedBaseUri);
 
-  if (!(await exists(generalDirectoryUri))) {
-    return [];
+  return listMarkdownFilesInDirectory(generalDirectoryUri);
+}
+
+export function isNoteUriInInbox(noteUri: string, baseUri: string): boolean {
+  const normalizedBaseUri = normalizeBaseUri(baseUri);
+  const normalizedNoteUri = normalizeNoteUri(noteUri);
+  const inboxDirectoryUri = getInboxDirectoryUri(normalizedBaseUri);
+  return normalizedNoteUri.startsWith(`${inboxDirectoryUri}/`);
+}
+
+export async function refreshInboxMarkdownIndex(baseUri: string): Promise<void> {
+  if (isDevMockVaultEnabled) {
+    const devStorage = getDevStorage();
+    await devStorage.refreshInboxMarkdownIndex(baseUri);
+    return;
   }
 
-  const documents = (await listFiles(generalDirectoryUri)) as SafDocumentFile[];
+  const normalizedBaseUri = normalizeBaseUri(baseUri);
+  const inboxRows = await listMarkdownFilesInDirectory(
+    getInboxDirectoryUri(normalizedBaseUri),
+  );
+  const body = buildInboxMarkdownIndexContent(inboxRows.map(row => row.name));
+  const generalDirectoryUri = getGeneralDirectoryUri(normalizedBaseUri);
 
-  return documents
-    .filter(document => {
-      const isFile = document.type === 'file' || document.type === undefined;
-      return (
-        isFile &&
-        typeof document.name === 'string' &&
-        document.name.endsWith(MARKDOWN_EXTENSION) &&
-        !isSyncConflictFileName(document.name)
-      );
-    })
-    .map(document => ({
-      lastModified:
-        typeof document.lastModified === 'number' ? document.lastModified : null,
-      name: document.name as string,
-      uri: document.uri,
-    }))
-    .sort((a, b) => {
-      const left = a.lastModified ?? 0;
-      const right = b.lastModified ?? 0;
-      return right - left;
-    });
+  if (!(await exists(generalDirectoryUri))) {
+    await mkdir(generalDirectoryUri);
+  }
+
+  const inboxIndexUri = `${generalDirectoryUri}/${INBOX_INDEX_FILE_NAME}`;
+  await writeFile(inboxIndexUri, body, {
+    encoding: 'utf8',
+    mimeType: 'text/markdown',
+  });
 }
 
 export async function readNote(noteUri: string): Promise<NoteDetail> {
@@ -390,6 +428,8 @@ export async function createNote(
     encoding: 'utf8',
     mimeType: 'text/markdown',
   });
+
+  await refreshInboxMarkdownIndex(normalizedBaseUri);
 
   return {
     lastModified: Date.now(),

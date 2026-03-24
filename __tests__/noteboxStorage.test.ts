@@ -10,10 +10,13 @@ import {
   writeFile,
 } from 'react-native-saf-x';
 
+import {tryListMarkdownFilesNative} from '../src/core/storage/androidVaultListing';
 import {
+  buildInboxMarkdownIndexContent,
   buildSafDocumentUri,
   clearPlaylist,
   createNote,
+  isNoteUriInInbox,
   listGeneralMarkdownFiles,
   listNotes,
   readNote,
@@ -21,6 +24,7 @@ import {
   readPodcastFileContent,
   initNotebox,
   readSettings,
+  refreshInboxMarkdownIndex,
   writePlaylist,
   writeNoteContent,
   writePodcastImageFile,
@@ -35,16 +39,23 @@ jest.mock('react-native-saf-x', () => ({
   writeFile: jest.fn(),
 }));
 
+jest.mock('../src/core/storage/androidVaultListing', () => ({
+  tryListMarkdownFilesNative: jest.fn(),
+}));
+
 describe('noteboxStorage', () => {
   const existsMock = exists as jest.MockedFunction<typeof exists>;
   const listFilesMock = listFiles as jest.MockedFunction<typeof listFiles>;
   const mkdirMock = mkdir as jest.MockedFunction<typeof mkdir>;
   const readFileMock = readFile as jest.MockedFunction<typeof readFile>;
   const writeFileMock = writeFile as jest.MockedFunction<typeof writeFile>;
+  const tryListMarkdownFilesNativeMock =
+    tryListMarkdownFilesNative as jest.MockedFunction<typeof tryListMarkdownFilesNative>;
   const baseUri = 'content://notes';
 
   beforeEach(() => {
     jest.clearAllMocks();
+    tryListMarkdownFilesNativeMock.mockResolvedValue(null);
   });
 
   test('initNotebox creates .notebox and default settings when missing', async () => {
@@ -96,6 +107,20 @@ describe('noteboxStorage', () => {
     );
   });
 
+  test('listNotes uses native listing when tryListMarkdownFilesNative returns rows', async () => {
+    tryListMarkdownFilesNativeMock.mockResolvedValueOnce([
+      {lastModified: 22, name: 'newer.md', uri: `${baseUri}/Inbox/newer.md`},
+      {lastModified: 11, name: 'older.md', uri: `${baseUri}/Inbox/older.md`},
+    ]);
+
+    await expect(listNotes(baseUri)).resolves.toEqual([
+      {lastModified: 22, name: 'newer.md', uri: `${baseUri}/Inbox/newer.md`},
+      {lastModified: 11, name: 'older.md', uri: `${baseUri}/Inbox/older.md`},
+    ]);
+    expect(existsMock).not.toHaveBeenCalled();
+    expect(listFilesMock).not.toHaveBeenCalled();
+  });
+
   test('listNotes returns markdown files sorted by lastModified', async () => {
     existsMock.mockResolvedValueOnce(true);
     listFilesMock.mockResolvedValueOnce([
@@ -136,6 +161,33 @@ describe('noteboxStorage', () => {
     expect(listFilesMock).not.toHaveBeenCalled();
   });
 
+  test('listNotes falls back to JS listing when native returns empty but directory exists', async () => {
+    tryListMarkdownFilesNativeMock.mockResolvedValueOnce([]);
+    existsMock.mockResolvedValue(true);
+    listFilesMock.mockResolvedValueOnce([
+      {
+        lastModified: 11,
+        name: 'note.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/note.md`,
+      },
+    ] as never);
+
+    await expect(listNotes(baseUri)).resolves.toEqual([
+      {lastModified: 11, name: 'note.md', uri: `${baseUri}/Inbox/note.md`},
+    ]);
+    expect(existsMock).toHaveBeenCalledWith(`${baseUri}/Inbox`);
+    expect(listFilesMock).toHaveBeenCalledWith(`${baseUri}/Inbox`);
+  });
+
+  test('listNotes returns empty when native returns empty and directory does not exist', async () => {
+    tryListMarkdownFilesNativeMock.mockResolvedValueOnce([]);
+    existsMock.mockResolvedValueOnce(false);
+
+    await expect(listNotes(baseUri)).resolves.toEqual([]);
+    expect(listFilesMock).not.toHaveBeenCalled();
+  });
+
   test('readNote reads markdown content by URI', async () => {
     readFileMock.mockResolvedValueOnce('# Hello');
 
@@ -147,6 +199,26 @@ describe('noteboxStorage', () => {
         uri: `${baseUri}/hello.md`,
       },
     });
+  });
+
+  test('listGeneralMarkdownFiles uses native listing when tryListMarkdownFilesNative returns rows', async () => {
+    tryListMarkdownFilesNativeMock.mockResolvedValueOnce([
+      {
+        lastModified: 11,
+        name: '2026 Demo - podcasts.md',
+        uri: `${baseUri}/General/2026 Demo - podcasts.md`,
+      },
+    ]);
+
+    await expect(listGeneralMarkdownFiles(baseUri)).resolves.toEqual([
+      {
+        lastModified: 11,
+        name: '2026 Demo - podcasts.md',
+        uri: `${baseUri}/General/2026 Demo - podcasts.md`,
+      },
+    ]);
+    expect(existsMock).not.toHaveBeenCalled();
+    expect(listFilesMock).not.toHaveBeenCalled();
   });
 
   test('listGeneralMarkdownFiles returns markdown files from General folder', async () => {
@@ -202,7 +274,16 @@ describe('noteboxStorage', () => {
   });
 
   test('createNote sanitizes title and writes markdown content', async () => {
-    existsMock.mockResolvedValueOnce(false);
+    existsMock.mockResolvedValueOnce(false).mockResolvedValue(true);
+    listFilesMock.mockResolvedValueOnce([
+      {
+        lastModified: 1,
+        name: 'team-ideas.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/team-ideas.md`,
+      },
+    ] as never);
+
     await expect(createNote(baseUri, ' Team Ideas! ', 'first line')).resolves.toMatchObject({
       name: 'team-ideas.md',
       uri: `${baseUri}/Inbox/team-ideas.md`,
@@ -216,6 +297,11 @@ describe('noteboxStorage', () => {
         mimeType: 'text/markdown',
       },
     );
+    expect(writeFileMock).toHaveBeenCalledWith(
+      `${baseUri}/General/Inbox.md`,
+      '# Inbox\n\n- [[Inbox/team-ideas|team-ideas]]\n',
+      {encoding: 'utf8', mimeType: 'text/markdown'},
+    );
   });
 
   test('writeNoteContent writes markdown content by URI', async () => {
@@ -225,6 +311,71 @@ describe('noteboxStorage', () => {
       encoding: 'utf8',
       mimeType: 'text/markdown',
     });
+  });
+
+  test('buildInboxMarkdownIndexContent sorts stems alphabetically', () => {
+    expect(buildInboxMarkdownIndexContent(['z.md', 'a.md', 'm.md'])).toBe(
+      '# Inbox\n\n- [[Inbox/a|a]]\n- [[Inbox/m|m]]\n- [[Inbox/z|z]]\n',
+    );
+  });
+
+  test('isNoteUriInInbox returns true when note URI is under Inbox', () => {
+    expect(isNoteUriInInbox(`${baseUri}/Inbox/foo.md`, baseUri)).toBe(true);
+    expect(isNoteUriInInbox(`${baseUri}/General/foo.md`, baseUri)).toBe(false);
+  });
+
+  test('refreshInboxMarkdownIndex writes empty index when Inbox is missing', async () => {
+    existsMock.mockResolvedValueOnce(false).mockResolvedValue(true);
+
+    await refreshInboxMarkdownIndex(baseUri);
+
+    expect(writeFileMock).toHaveBeenCalledWith(
+      `${baseUri}/General/Inbox.md`,
+      '# Inbox\n\n',
+      {encoding: 'utf8', mimeType: 'text/markdown'},
+    );
+  });
+
+  test('refreshInboxMarkdownIndex creates General when missing', async () => {
+    tryListMarkdownFilesNativeMock.mockResolvedValueOnce([
+      {lastModified: 1, name: 'a.md', uri: `${baseUri}/Inbox/a.md`},
+    ]);
+    existsMock.mockResolvedValueOnce(false);
+
+    await refreshInboxMarkdownIndex(baseUri);
+
+    expect(mkdirMock).toHaveBeenCalledWith(`${baseUri}/General`);
+    expect(writeFileMock).toHaveBeenCalledWith(
+      `${baseUri}/General/Inbox.md`,
+      '# Inbox\n\n- [[Inbox/a|a]]\n',
+      {encoding: 'utf8', mimeType: 'text/markdown'},
+    );
+  });
+
+  test('refreshInboxMarkdownIndex uses JS listing when native returns null', async () => {
+    existsMock.mockResolvedValue(true);
+    listFilesMock.mockResolvedValueOnce([
+      {
+        lastModified: 2,
+        name: 'b.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/b.md`,
+      },
+      {
+        lastModified: 1,
+        name: 'a.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/a.md`,
+      },
+    ] as never);
+
+    await refreshInboxMarkdownIndex(baseUri);
+
+    expect(writeFileMock).toHaveBeenCalledWith(
+      `${baseUri}/General/Inbox.md`,
+      '# Inbox\n\n- [[Inbox/a|a]]\n- [[Inbox/b|b]]\n',
+      {encoding: 'utf8', mimeType: 'text/markdown'},
+    );
   });
 
   test('writePlaylist writes playlist.json', async () => {

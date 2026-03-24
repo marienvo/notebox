@@ -1,0 +1,130 @@
+---
+description: Protect startup performance and keep a clear TypeScript versus Kotlin boundary
+globs:
+  - "apps/mobile/**"
+  - "packages/**"
+alwaysApply: true
+---
+
+# Mobile Performance and Native Boundary Rules
+
+## Goal
+Keep the app snappy at startup and prevent slow, gradual performance regression.
+Prefer TypeScript by default.
+Use Kotlin only when it provides a clear and measurable benefit.
+
+## Core principles
+- First screen render is sacred. Protect it.
+- Do not add work to startup unless the first visible screen truly depends on it.
+- Prefer simple architecture over premature optimization.
+- Prefer measurable wins over theoretical purity.
+- Do not move logic to Kotlin just because it feels more native.
+
+## Default approach
+- Implement new logic in TypeScript first.
+- Keep UI logic, app flow, and business rules in TypeScript unless there is a strong reason not to.
+- Keep the app root, top-level providers, and bootstrap flow as light as possible.
+- Prefer cached or last-known state for first render, then refresh in the background.
+
+## Use Kotlin only when at least one of these is true
+- The feature depends on Android platform APIs or system services.
+- The feature uses Storage Access Framework or other Android-specific file APIs.
+- The task performs heavy file-system access, scans, or indexing.
+- The task processes large numbers of files or large payloads.
+- The task must run reliably in the background on Android.
+- The task involves media playback, audio session integration, or other native media concerns.
+- The task is on a performance-critical path and TypeScript is measurably too slow.
+
+## Do not use Kotlin when
+- The logic is mostly UI state, app flow, or business rules.
+- The problem has not been measured.
+- The expected gain is unclear, small, or speculative.
+- The complexity cost is likely higher than the performance gain.
+- The work can be deferred until after first render.
+- The real problem is doing too much work rather than doing it in TypeScript.
+
+## Before proposing Kotlin, first consider
+- deferring the work
+- caching the result
+- doing less work
+- reducing frequency
+- limiting the data set
+- moving the work off the startup path
+- loading the feature lazily
+- using a simpler TypeScript implementation
+
+## Startup rules
+- Do not block first render with non-essential work.
+- Defer non-essential file scans, feed refreshes, markdown parsing, artwork loading, and indexing until after first render.
+- Lazy-initialize audio unless immediate playback restore is required.
+- Do not scan the full vault on startup unless the first visible screen truly depends on fresh scan results.
+- Do not parse large markdown sets on startup unless strictly necessary for the initial screen.
+- Do not hydrate all stores or initialize all services by default at app launch.
+- Avoid one global bootstrap step that eagerly initializes many unrelated systems.
+
+## State and provider rules
+- Keep App root and top-level providers minimal.
+- Only initialize what the first screen needs.
+- Avoid broad global hydration at startup.
+- Prefer feature-level initialization over app-wide eager initialization.
+- Be cautious with import-time side effects.
+
+## Dependency rules
+- Avoid heavy dependencies for small problems.
+- Prefer focused libraries over broad utility bundles.
+- Be cautious with libraries that perform work at import time.
+- Any new dependency must be justified in one sentence.
+- Any dependency added to the startup path must be treated as high scrutiny.
+
+## Performance measurement rules
+Do not rely on intuition for startup-sensitive changes.
+Measure before and after when changing startup behavior or moving logic across the TypeScript and Kotlin boundary.
+
+## Measure when changing
+- app startup flow
+- root providers
+- store hydration
+- file scanning
+- markdown parsing
+- audio initialization
+- persistent cache restore
+- native module initialization
+- dependency loading on the startup path
+
+## Minimum measurement requirement
+For startup-sensitive changes, add or update simple timing logs for:
+- app process start
+- React root mounted
+- first screen rendered
+- first screen interactive
+- file index start and end
+- audio init start and end
+
+## Change review requirement
+When proposing any of the following:
+- new dependency
+- new provider
+- new startup initialization
+- new background process
+- new native module
+- new persistent cache
+- new file scan or parser
+- moving logic from TypeScript to Kotlin
+
+Always state:
+1. Why this is needed
+2. Whether it is on the startup path
+3. Whether it can be deferred
+4. Why TypeScript is enough or why Kotlin is justified
+5. What performance risk this introduces
+6. How it should be measured
+
+## Bias for this app
+- Full file indexing may use Kotlin because it scans many file names and is performance-sensitive.
+- Keep full file indexing off the critical startup path unless the first screen truly depends on fresh results.
+- Keep audio playback native where platform integration matters.
+- Keep general app flow, UI state, and non-critical business logic in TypeScript.
+- If a change risks gradual startup regression, prefer the simpler and more deferrable design.
+
+## Guardrail
+If a proposed change makes startup behavior less clear, more eager, or harder to measure, prefer a simpler design.
