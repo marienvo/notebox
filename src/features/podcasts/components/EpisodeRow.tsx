@@ -1,11 +1,12 @@
 import {Pressable, Text} from '@gluestack-ui/themed';
 import {useCallback, useRef, useState} from 'react';
-import {Image, StyleSheet, View} from 'react-native';
+import {StyleSheet, View} from 'react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 import {useVaultContext} from '../../../core/vault/VaultContext';
 import {PodcastEpisode} from '../../../types';
+import {PodcastArtworkImage} from './PodcastArtworkImage';
 import {usePodcastArtwork} from '../hooks/usePodcastArtwork';
 import {PlayerState} from '../services/audioPlayer';
 
@@ -86,13 +87,11 @@ export function EpisodeRow({
           onPlayEpisode(episode).catch(() => undefined);
         }}
         style={[styles.episodeRow, {borderBottomColor: dividerColor}]}>
-        {artworkUri ? (
-          <Image source={{uri: artworkUri}} style={styles.artwork} />
-        ) : (
-          <View style={styles.artworkPlaceholder}>
-            <MaterialIcons color="#8f8f8f" name="music-note" size={20} />
-          </View>
-        )}
+        <PodcastArtworkImage
+          artworkUri={artworkUri}
+          imageStyle={styles.artwork}
+          placeholderStyle={styles.artworkPlaceholder}
+        />
         <View style={styles.episodeContent}>
           <Text style={styles.episodeTitle}>{episode.title}</Text>
           <Text style={[styles.meta, {color: mutedTextColor}]}>
