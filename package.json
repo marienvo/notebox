@@ -14,7 +14,8 @@
     "lint": "eslint .",
     "postinstall": "patch-package",
     "start": "react-native start",
-    "test": "jest",
+    "test": "jest && node --test scripts/bump-release-version-lib.test.mjs",
+    "test:scripts": "node --test scripts/bump-release-version-lib.test.mjs",
     "prepare": "husky"
   },
   "dependencies": {

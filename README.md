@@ -83,6 +83,8 @@ Build release APK (takes some time):
 npm run build:apk-release
 ```
 
+The release script runs [`scripts/bump-release-version.mjs`](scripts/bump-release-version.mjs) first: the **first** release build on this machine records the current Git branch and commit under `.local/build-version-state.json` (gitignored) without changing the version. Later release builds **bump** `package.json` and Android `versionName` / `versionCode`: **minor** (`0.x.0`) the first time you release on a branch name that was not seen before, otherwise **patch** (`0.0.x`) when the commit SHA was not built before. Debug builds (`npm run build:apk`) do not bump. Building `assembleRelease` only from Android Studio skips the bump; use `npm run build:apk-release` for the full flow.
+
 Install release APK to a connected Android device via `adb`:
 
 ```bash
