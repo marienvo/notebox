@@ -135,14 +135,16 @@ async function listMarkdownFilesInDirectory(
   if (fromNative !== null && fromNative.length > 0) {
     return fromNative;
   }
+  let inboxDirectoryVerified = false;
   if (fromNative !== null && fromNative.length === 0) {
     if (!(await exists(directoryUri))) {
       return [];
     }
+    inboxDirectoryVerified = true;
     // Native returned empty but SAF says the directory exists — use JS listing.
   }
 
-  if (!(await exists(directoryUri))) {
+  if (!inboxDirectoryVerified && !(await exists(directoryUri))) {
     return [];
   }
 
@@ -188,7 +190,7 @@ function isValidPlaylistEntry(value: unknown): value is PlaylistEntry {
   );
 }
 
-function parseSettings(rawSettings: string): NoteboxSettings {
+export function parseNoteboxSettings(rawSettings: string): NoteboxSettings {
   const parsed = JSON.parse(rawSettings) as Partial<NoteboxSettings>;
 
   if (
@@ -235,7 +237,7 @@ export async function readSettings(baseUri: string): Promise<NoteboxSettings> {
   const settingsUri = getSettingsUri(normalizedBaseUri);
   const rawSettings = await readFile(settingsUri, {encoding: 'utf8'});
 
-  return parseSettings(rawSettings);
+  return parseNoteboxSettings(rawSettings);
 }
 
 export async function writeSettings(
@@ -269,6 +271,27 @@ export async function listNotes(baseUri: string): Promise<NoteSummary[]> {
   return listMarkdownFilesInDirectory(inboxDirectoryUri);
 }
 
+/**
+ * Lists Inbox markdown notes and writes `General/Inbox.md` from that single directory scan.
+ * Prefer this over `listNotes` + `refreshInboxMarkdownIndex` to avoid duplicate SAF work.
+ */
+export async function listInboxNotesAndSyncIndex(baseUri: string): Promise<NoteSummary[]> {
+  if (isDevMockVaultEnabled) {
+    const devStorage = getDevStorage();
+    return devStorage.listInboxNotesAndSyncIndex(baseUri);
+  }
+
+  const normalizedBaseUri = normalizeBaseUri(baseUri);
+  const inboxRows = await listMarkdownFilesInDirectory(
+    getInboxDirectoryUri(normalizedBaseUri),
+  );
+  await writeInboxMarkdownIndexFromMarkdownFileNames(
+    normalizedBaseUri,
+    inboxRows.map(row => row.name),
+  );
+  return inboxRows;
+}
+
 export async function listGeneralMarkdownFiles(
   baseUri: string,
 ): Promise<RootMarkdownFile[]> {
@@ -290,18 +313,11 @@ export function isNoteUriInInbox(noteUri: string, baseUri: string): boolean {
   return normalizedNoteUri.startsWith(`${inboxDirectoryUri}/`);
 }
 
-export async function refreshInboxMarkdownIndex(baseUri: string): Promise<void> {
-  if (isDevMockVaultEnabled) {
-    const devStorage = getDevStorage();
-    await devStorage.refreshInboxMarkdownIndex(baseUri);
-    return;
-  }
-
-  const normalizedBaseUri = normalizeBaseUri(baseUri);
-  const inboxRows = await listMarkdownFilesInDirectory(
-    getInboxDirectoryUri(normalizedBaseUri),
-  );
-  const body = buildInboxMarkdownIndexContent(inboxRows.map(row => row.name));
+async function writeInboxMarkdownIndexFromMarkdownFileNames(
+  normalizedBaseUri: string,
+  markdownFileNames: string[],
+): Promise<void> {
+  const body = buildInboxMarkdownIndexContent(markdownFileNames);
   const generalDirectoryUri = getGeneralDirectoryUri(normalizedBaseUri);
 
   if (!(await exists(generalDirectoryUri))) {
@@ -313,6 +329,23 @@ export async function refreshInboxMarkdownIndex(baseUri: string): Promise<void> 
     encoding: 'utf8',
     mimeType: 'text/markdown',
   });
+}
+
+export async function refreshInboxMarkdownIndex(baseUri: string): Promise<void> {
+  if (isDevMockVaultEnabled) {
+    const devStorage = getDevStorage();
+    await devStorage.refreshInboxMarkdownIndex(baseUri);
+    return;
+  }
+
+  const normalizedBaseUri = normalizeBaseUri(baseUri);
+  const inboxRows = await listMarkdownFilesInDirectory(
+    getInboxDirectoryUri(normalizedBaseUri),
+  );
+  await writeInboxMarkdownIndexFromMarkdownFileNames(
+    normalizedBaseUri,
+    inboxRows.map(row => row.name),
+  );
 }
 
 export async function readNote(noteUri: string): Promise<NoteDetail> {

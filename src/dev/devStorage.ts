@@ -393,11 +393,13 @@ export async function createNote(
   };
 }
 
-export async function refreshInboxMarkdownIndex(baseUri: string): Promise<void> {
+async function syncInboxMarkdownIndexFromSummaries(
+  baseUri: string,
+  summaries: NoteSummary[],
+): Promise<void> {
   assertMockBaseUri(baseUri);
   await ensureSeeded();
 
-  const summaries = await listNotes(baseUri);
   const basenames = summaries.map(summary => {
     const segments = summary.name.split('/');
     return segments[segments.length - 1] ?? summary.name;
@@ -408,6 +410,19 @@ export async function refreshInboxMarkdownIndex(baseUri: string): Promise<void> 
   podcastIndex[indexPath] = Date.now();
   await writePodcastIndex(podcastIndex);
   await AsyncStorage.setItem(devPodcastKey(indexPath), body);
+}
+
+export async function refreshInboxMarkdownIndex(baseUri: string): Promise<void> {
+  const summaries = await listNotes(baseUri);
+  await syncInboxMarkdownIndexFromSummaries(baseUri, summaries);
+}
+
+export async function listInboxNotesAndSyncIndex(baseUri: string): Promise<NoteSummary[]> {
+  assertMockBaseUri(baseUri);
+  await ensureSeeded();
+  const summaries = await listNotes(baseUri);
+  await syncInboxMarkdownIndexFromSummaries(baseUri, summaries);
+  return summaries;
 }
 
 export async function writeNoteContent(

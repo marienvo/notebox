@@ -34,12 +34,6 @@ jest.mock('../src/features/podcasts/services/rssArtwork', () => ({
   fetchRssArtworkUrl: jest.fn(),
 }));
 
-jest.mock('@react-native-async-storage/async-storage', () => ({
-  getItem: jest.fn(),
-  removeItem: jest.fn(),
-  setItem: jest.fn(),
-}));
-
 describe('podcastImageCache', () => {
   const asyncStorageGetItemMock = AsyncStorage.getItem as jest.MockedFunction<
     typeof AsyncStorage.getItem

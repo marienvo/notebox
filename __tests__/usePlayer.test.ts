@@ -7,12 +7,6 @@ import {useVaultContext} from '../src/core/vault/VaultContext';
 import {getAudioPlayer} from '../src/features/podcasts/services/audioPlayer';
 import {PodcastEpisode} from '../src/types';
 
-jest.mock('@react-native-async-storage/async-storage', () => ({
-  getItem: jest.fn(),
-  removeItem: jest.fn(),
-  setItem: jest.fn(),
-}));
-
 jest.mock('../src/core/storage/noteboxStorage', () => ({
   clearPlaylist: jest.fn(),
   readPlaylist: jest.fn(),
@@ -99,6 +93,7 @@ describe('usePlayer restore state', () => {
 
     useVaultContextMock.mockReturnValue({
       baseUri: 'content://vault-root',
+      consumeInboxPrefetch: jest.fn(() => null),
       isLoading: false,
       refreshSession: jest.fn(async () => undefined),
       settings: null,

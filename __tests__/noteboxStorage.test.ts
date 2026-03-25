@@ -17,7 +17,9 @@ import {
   createNote,
   isNoteUriInInbox,
   listGeneralMarkdownFiles,
+  listInboxNotesAndSyncIndex,
   listNotes,
+  parseNoteboxSettings,
   readNote,
   readPlaylist,
   readPodcastFileContent,
@@ -81,6 +83,10 @@ describe('noteboxStorage', () => {
 
     expect(mkdirMock).not.toHaveBeenCalled();
     expect(writeFileMock).not.toHaveBeenCalled();
+  });
+
+  test('parseNoteboxSettings throws when displayName is missing', () => {
+    expect(() => parseNoteboxSettings('{}')).toThrow('settings.json has an invalid structure.');
   });
 
   test('readSettings parses settings.json content', async () => {
@@ -174,6 +180,7 @@ describe('noteboxStorage', () => {
     await expect(listNotes(baseUri)).resolves.toEqual([
       {lastModified: 11, name: 'note.md', uri: `${baseUri}/Inbox/note.md`},
     ]);
+    expect(existsMock).toHaveBeenCalledTimes(1);
     expect(existsMock).toHaveBeenCalledWith(`${baseUri}/Inbox`);
     expect(listFilesMock).toHaveBeenCalledWith(`${baseUri}/Inbox`);
   });
@@ -184,6 +191,28 @@ describe('noteboxStorage', () => {
 
     await expect(listNotes(baseUri)).resolves.toEqual([]);
     expect(listFilesMock).not.toHaveBeenCalled();
+  });
+
+  test('listInboxNotesAndSyncIndex lists Inbox once and writes General/Inbox.md', async () => {
+    tryListMarkdownFilesNativeMock.mockResolvedValueOnce([
+      {lastModified: 2, name: 'b.md', uri: `${baseUri}/Inbox/b.md`},
+      {lastModified: 1, name: 'a.md', uri: `${baseUri}/Inbox/a.md`},
+    ]);
+    existsMock.mockResolvedValueOnce(false);
+
+    await expect(listInboxNotesAndSyncIndex(baseUri)).resolves.toEqual([
+      {lastModified: 2, name: 'b.md', uri: `${baseUri}/Inbox/b.md`},
+      {lastModified: 1, name: 'a.md', uri: `${baseUri}/Inbox/a.md`},
+    ]);
+
+    expect(tryListMarkdownFilesNativeMock).toHaveBeenCalledTimes(1);
+    expect(tryListMarkdownFilesNativeMock).toHaveBeenCalledWith(`${baseUri}/Inbox`);
+    expect(mkdirMock).toHaveBeenCalledWith(`${baseUri}/General`);
+    expect(writeFileMock).toHaveBeenCalledWith(
+      `${baseUri}/General/Inbox.md`,
+      '# Inbox\n\n- [[Inbox/a|a]]\n- [[Inbox/b|b]]\n',
+      {encoding: 'utf8', mimeType: 'text/markdown'},
+    );
   });
 
   test('readNote reads markdown content by URI', async () => {

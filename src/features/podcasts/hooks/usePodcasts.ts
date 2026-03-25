@@ -1,4 +1,5 @@
 import {useCallback, useEffect, useState} from 'react';
+import {InteractionManager} from 'react-native';
 
 import {
   clearPlaylist,
@@ -29,6 +30,19 @@ import {
 
 type FileContentCacheEntry = {lastModified: number; content: string};
 const fileContentCache = new Map<string, FileContentCacheEntry>();
+
+/** Defer full General/ SAF listing so it does not compete with vault session prepare on cold start. */
+function backgroundGeneralReconcileDelayMs(): number {
+  const g = globalThis as {__NOTEBOX_JEST__?: boolean; jest?: unknown};
+  if (g.__NOTEBOX_JEST__ === true) {
+    return 0;
+  }
+  // Jest provides `jest` on `globalThis`; release RN bundles do not.
+  if (typeof g.jest !== 'undefined') {
+    return 0;
+  }
+  return 6000;
+}
 
 type FileWithContent = {
   content: string;
@@ -227,65 +241,77 @@ export function usePodcasts(): UsePodcastsResult {
         const indexSignature = podcastMarkdownIndexSignature(podcastRelevantFiles);
 
         if (!didFullVaultListingThisRefresh) {
-          (async () => {
-            try {
-              const full = await listGeneralMarkdownFiles(baseUri);
-              const subset = filterPodcastRelevantGeneralMarkdownFiles(full);
-              await savePersistedPodcastMarkdownIndex(baseUri, subset);
-              if (podcastMarkdownIndexSignature(subset) === indexSignature) {
-                return;
-              }
-
-              const {podcastFiles: freshPodcastFiles, rssFeedFiles: freshRssFiles} =
-                splitPodcastAndRssMarkdownFiles(subset);
-              const rebuilt = await buildPodcastSectionsFromPodcastMarkdownFiles(
-                baseUri,
-                freshPodcastFiles,
-              );
-              primeArtworkForEpisodesAndSections(
-                baseUri,
-                rebuilt.nextAllEpisodes,
-                rebuilt.nextSections,
-              );
-              setAllEpisodes(rebuilt.nextAllEpisodes);
-              setSections(rebuilt.nextSections);
-
-              if (freshRssFiles.length > 0) {
-                const rssContentsByFile = await Promise.all(
-                  freshRssFiles.map(file => readMarkdownWithSessionCache(file)),
-                );
-                const rssFeedUrls = new Set<string>();
-
-                for (const {content, file} of rssContentsByFile) {
-                  const rssFeedUrl = extractRssFeedUrl(content);
-                  if (!rssFeedUrl) {
-                    continue;
-                  }
-                  rssFeedUrls.add(rssFeedUrl);
-                  const sectionTitle = extractRssPodcastTitle(file.name, content);
-                  persistRssFeedUrl(baseUri, sectionTitle, rssFeedUrl);
+          const runReconcile = () => {
+            (async () => {
+              try {
+                const full = await listGeneralMarkdownFiles(baseUri);
+                const subset = filterPodcastRelevantGeneralMarkdownFiles(full);
+                await savePersistedPodcastMarkdownIndex(baseUri, subset);
+                if (podcastMarkdownIndexSignature(subset) === indexSignature) {
+                  return;
                 }
 
-                const enrichedEpisodes = enrichEpisodesWithCachedRss(
+                const {podcastFiles: freshPodcastFiles, rssFeedFiles: freshRssFiles} =
+                  splitPodcastAndRssMarkdownFiles(subset);
+                const rebuilt = await buildPodcastSectionsFromPodcastMarkdownFiles(
+                  baseUri,
+                  freshPodcastFiles,
+                );
+                primeArtworkForEpisodesAndSections(
                   baseUri,
                   rebuilt.nextAllEpisodes,
+                  rebuilt.nextSections,
                 );
-                const hasRssUpdates = enrichedEpisodes.some(
-                  (episode, index) =>
-                    episode.rssFeedUrl !== rebuilt.nextAllEpisodes[index]?.rssFeedUrl,
-                );
-                if (hasRssUpdates) {
-                  setAllEpisodes(enrichedEpisodes);
-                  setSections(createSectionsWithRss(baseUri, enrichedEpisodes));
+                setAllEpisodes(rebuilt.nextAllEpisodes);
+                setSections(rebuilt.nextSections);
+
+                if (freshRssFiles.length > 0) {
+                  const rssContentsByFile = await Promise.all(
+                    freshRssFiles.map(file => readMarkdownWithSessionCache(file)),
+                  );
+                  const rssFeedUrls = new Set<string>();
+
+                  for (const {content, file} of rssContentsByFile) {
+                    const rssFeedUrl = extractRssFeedUrl(content);
+                    if (!rssFeedUrl) {
+                      continue;
+                    }
+                    rssFeedUrls.add(rssFeedUrl);
+                    const sectionTitle = extractRssPodcastTitle(file.name, content);
+                    persistRssFeedUrl(baseUri, sectionTitle, rssFeedUrl);
+                  }
+
+                  const enrichedEpisodes = enrichEpisodesWithCachedRss(
+                    baseUri,
+                    rebuilt.nextAllEpisodes,
+                  );
+                  const hasRssUpdates = enrichedEpisodes.some(
+                    (episode, index) =>
+                      episode.rssFeedUrl !== rebuilt.nextAllEpisodes[index]?.rssFeedUrl,
+                  );
+                  if (hasRssUpdates) {
+                    setAllEpisodes(enrichedEpisodes);
+                    setSections(createSectionsWithRss(baseUri, enrichedEpisodes));
+                  }
+                  if (rssFeedUrls.size > 0) {
+                    primeArtworkCacheFromDisk(baseUri, Array.from(rssFeedUrls)).catch(
+                      () => undefined,
+                    );
+                  }
                 }
-                if (rssFeedUrls.size > 0) {
-                  primeArtworkCacheFromDisk(baseUri, Array.from(rssFeedUrls)).catch(() => undefined);
-                }
+              } catch {
+                /* ignore background reconcile errors */
               }
-            } catch {
-              /* ignore background reconcile errors */
-            }
-          })().catch(() => undefined);
+            })().catch(() => undefined);
+          };
+          const delayMs = backgroundGeneralReconcileDelayMs();
+          if (delayMs === 0) {
+            setTimeout(runReconcile, 0);
+          } else {
+            InteractionManager.runAfterInteractions(() => {
+              setTimeout(runReconcile, delayMs);
+            });
+          }
         }
       } catch (loadError) {
         const fallbackMessage = 'Could not load podcasts from vault.';

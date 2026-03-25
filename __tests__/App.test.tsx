@@ -9,11 +9,6 @@ import {hasPermission} from 'react-native-saf-x';
 import {resolveInitialRoute} from '../src/core/bootstrap/resolveInitialRoute';
 import {NOTES_DIRECTORY_URI_KEY} from '../src/core/storage/keys';
 
-jest.mock('@react-native-async-storage/async-storage', () => ({
-  getItem: jest.fn(),
-  removeItem: jest.fn(),
-}));
-
 jest.mock('react-native-saf-x', () => ({
   hasPermission: jest.fn(),
 }));
