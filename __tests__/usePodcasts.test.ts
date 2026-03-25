@@ -414,6 +414,12 @@ describe('usePodcasts loading lifecycle', () => {
       await flushPromises();
     });
 
+    await act(async () => {
+      await new Promise<void>(resolve => setImmediate(resolve));
+      await flushPromises();
+      await flushPromises();
+    });
+
     expect(listGeneralMarkdownFilesMock).toHaveBeenCalled();
     await act(async () => {
       renderer?.unmount();

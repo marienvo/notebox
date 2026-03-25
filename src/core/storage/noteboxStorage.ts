@@ -137,26 +137,25 @@ type SafDocumentFile = {
   uri: string;
 };
 
-async function listMarkdownFilesInDirectory(
-  directoryUri: string,
-): Promise<Array<{lastModified: number | null; name: string; uri: string}>> {
-  const fromNative = await tryListMarkdownFilesNative(directoryUri);
-  if (fromNative !== null && fromNative.length > 0) {
-    return fromNative;
-  }
-  let inboxDirectoryVerified = false;
-  if (fromNative !== null && fromNative.length === 0) {
-    if (!(await exists(directoryUri))) {
-      return [];
-    }
-    inboxDirectoryVerified = true;
-    // Native returned empty but SAF says the directory exists — use JS listing.
-  }
+type MarkdownDirRow = {lastModified: number | null; name: string; uri: string};
 
-  if (!inboxDirectoryVerified && !(await exists(directoryUri))) {
+/**
+ * SAF-only listing (react-native-saf-x). Used in parallel with native listing so a slow or
+ * failing Kotlin `listMarkdownFiles` call does not block the fast JS path.
+ */
+async function listMarkdownFilesViaSaf(
+  directoryUri: string,
+  getShouldCancel?: () => boolean,
+): Promise<MarkdownDirRow[]> {
+  if (getShouldCancel?.()) {
     return [];
   }
-
+  if (!(await exists(directoryUri))) {
+    return [];
+  }
+  if (getShouldCancel?.()) {
+    return [];
+  }
   const documents = (await listFiles(directoryUri)) as SafDocumentFile[];
 
   return documents
@@ -180,6 +179,41 @@ async function listMarkdownFilesInDirectory(
       const right = b.lastModified ?? 0;
       return right - left;
     });
+}
+
+async function listMarkdownFilesInDirectory(
+  directoryUri: string,
+): Promise<MarkdownDirRow[]> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const settle = (rows: MarkdownDirRow[]) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(rows);
+    };
+
+    void (async () => {
+      try {
+        const rows = await listMarkdownFilesViaSaf(directoryUri, () => settled);
+        if (!settled) {
+          settle(rows);
+        }
+      } catch (error) {
+        if (!settled) {
+          reject(error);
+        }
+      }
+    })();
+
+    void (async () => {
+      const native = await tryListMarkdownFilesNative(directoryUri);
+      if (!settled && native !== null) {
+        settle(native);
+      }
+    })();
+  });
 }
 
 function isValidPlaylistEntry(value: unknown): value is PlaylistEntry {
@@ -334,6 +368,15 @@ async function writeInboxMarkdownIndexFromMarkdownFileNames(
   }
 
   const inboxIndexUri = `${generalDirectoryUri}/${INBOX_INDEX_FILE_NAME}`;
+  try {
+    const existing = await readFile(inboxIndexUri, {encoding: 'utf8'});
+    if (existing === body) {
+      return;
+    }
+  } catch {
+    // Missing or unreadable: write a new index below.
+  }
+
   await writeFile(inboxIndexUri, body, {
     encoding: 'utf8',
     mimeType: 'text/markdown',

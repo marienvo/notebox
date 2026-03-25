@@ -2,7 +2,6 @@ package com.notebox
 
 import android.content.ContentResolver
 import android.net.Uri
-import android.os.SystemClock
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import com.facebook.react.bridge.Arguments
@@ -27,9 +26,30 @@ import java.util.concurrent.Executors
 class VaultListingModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
 
-  private val executor = Executors.newSingleThreadExecutor()
+  /**
+   * One executor for all SAF/DocumentFile work so parallel prepare + listings do not convoy on a
+   * cold StorageAccessProvider.
+   */
+  private val safExecutor =
+    Executors.newSingleThreadExecutor { runnable ->
+      Thread(runnable, "NoteboxSaf").apply { isDaemon = true }
+    }
 
   override fun getName(): String = MODULE_NAME
+
+  /**
+   * SAF vault roots from the folder picker are **tree** URIs (`…/tree/…`). Using
+   * [DocumentFile.fromSingleUri] on those can stall or misbehave; [DocumentFile.fromTreeUri] is
+   * the supported API for the same string.
+   */
+  private fun documentFileFromStorageUri(uri: Uri): DocumentFile? {
+    val path = uri.path
+    return if (path != null && path.contains("/tree/", ignoreCase = true)) {
+      DocumentFile.fromTreeUri(reactContext, uri) ?: DocumentFile.fromSingleUri(reactContext, uri)
+    } else {
+      DocumentFile.fromSingleUri(reactContext, uri)
+    }
+  }
 
   /**
    * Ensures `.notebox/settings.json`, ensures `Inbox` and `General`, lists Inbox markdown,
@@ -38,11 +58,12 @@ class VaultListingModule(private val reactContext: ReactApplicationContext) :
    */
   @ReactMethod
   fun prepareNoteboxSession(baseUri: String, promise: Promise) {
-    executor.execute {
+    safExecutor.execute {
       try {
         val result = prepareNoteboxSessionSync(baseUri.trim())
         reactContext.runOnUiQueueThread { promise.resolve(result) }
       } catch (e: Exception) {
+        Log.e(TAG, "prepareNoteboxSession failed", e)
         reactContext.runOnUiQueueThread {
           promise.reject(E_VAULT_PREPARE, e.message ?: "Vault session prepare failed", e)
         }
@@ -52,11 +73,12 @@ class VaultListingModule(private val reactContext: ReactApplicationContext) :
 
   @ReactMethod
   fun listMarkdownFiles(directoryUri: String, promise: Promise) {
-    executor.execute {
+    safExecutor.execute {
       try {
         val result = buildMarkdownListing(directoryUri)
         reactContext.runOnUiQueueThread { promise.resolve(result) }
       } catch (e: Exception) {
+        Log.e(TAG, "listMarkdownFiles failed", e)
         reactContext.runOnUiQueueThread {
           promise.reject(E_VAULT_LISTING, e.message ?: "Vault listing failed", e)
         }
@@ -65,23 +87,57 @@ class VaultListingModule(private val reactContext: ReactApplicationContext) :
   }
 
   private fun buildMarkdownListing(directoryUri: String): WritableArray {
-    val uri = Uri.parse(directoryUri)
-    val dir =
-      DocumentFile.fromSingleUri(reactContext, uri)
-        ?: throw IllegalStateException(
-          "DocumentFile.fromSingleUri returned null; use JS listing fallback.",
-        )
-    if (!dir.exists()) {
-      throw IllegalStateException(
-        "DocumentFile reports directory missing; use JS listing fallback.",
+    val dir = resolveDirectoryForListing(directoryUri.trim())
+    val rows = collectMarkdownRows(dir)
+    return rowsToWritableArray(rows)
+  }
+
+  /**
+   * JS passes tree child paths as string concat (`vaultRoot/Inbox`). Prefer resolving via the
+   * parent tree URI + [DocumentFile.findFile]/[DocumentFile.listFiles] (same as
+   * [prepareNoteboxSessionSync]); fall back to opening the full child URI via [documentFileFromStorageUri].
+   */
+  private fun resolveDirectoryForListing(directoryUriTrimmed: String): DocumentFile {
+    val withoutSlash = directoryUriTrimmed.trimEnd('/')
+    val pairs =
+      listOf(
+        "/$INBOX_DIR_NAME" to INBOX_DIR_NAME,
+        "/$GENERAL_DIR_NAME" to GENERAL_DIR_NAME,
       )
+    for ((suffix, displayName) in pairs) {
+      if (withoutSlash.endsWith(suffix, ignoreCase = true)) {
+        val parentUriString = withoutSlash.dropLast(suffix.length)
+        if (parentUriString.isEmpty()) {
+          continue
+        }
+        val parentUri = Uri.parse(parentUriString)
+        val parent = documentFileFromStorageUri(parentUri) ?: continue
+        if (!parent.exists() || !parent.isDirectory) {
+          continue
+        }
+        val byFind = parent.findFile(displayName)
+        if (byFind != null && byFind.exists() && byFind.isDirectory) {
+          return byFind
+        }
+        val children = parent.listFiles() ?: continue
+        for (child in children) {
+          if (child != null &&
+            child.isDirectory &&
+            displayName.equals(child.name, ignoreCase = true)
+          ) {
+            return child
+          }
+        }
+      }
     }
-    if (!dir.isDirectory) {
-      throw IllegalStateException(
-        "URI is not a directory; use JS listing fallback.",
-      )
+    val uri = Uri.parse(directoryUriTrimmed)
+    val direct = documentFileFromStorageUri(uri)
+    if (direct != null && direct.exists() && direct.isDirectory) {
+      return direct
     }
-    return rowsToWritableArray(collectMarkdownRows(dir))
+    throw IllegalStateException(
+      "Could not resolve listing directory (parent enum and direct child failed); use JS fallback.",
+    )
   }
 
   private data class MarkdownRow(val uri: String, val name: String, val lastModified: Long)
@@ -159,11 +215,10 @@ class VaultListingModule(private val reactContext: ReactApplicationContext) :
   }
 
   private fun prepareNoteboxSessionSync(baseUriTrimmed: String): WritableMap {
-    val sessionT0 = SystemClock.elapsedRealtime()
     val uri = Uri.parse(baseUriTrimmed)
     val root =
-      DocumentFile.fromSingleUri(reactContext, uri)
-        ?: throw IllegalStateException("DocumentFile.fromSingleUri returned null for vault root.")
+      documentFileFromStorageUri(uri)
+        ?: throw IllegalStateException("DocumentFile could not open vault root (tree/single).")
     if (!root.exists()) {
       throw IllegalStateException("Vault root is missing.")
     }
@@ -171,7 +226,6 @@ class VaultListingModule(private val reactContext: ReactApplicationContext) :
       throw IllegalStateException("Vault root URI is not a directory.")
     }
 
-    val tRootEnum0 = SystemClock.elapsedRealtime()
     val rootChildren =
       root.listFiles()
         ?: throw IllegalStateException("Vault root listFiles returned null.")
@@ -183,14 +237,12 @@ class VaultListingModule(private val reactContext: ReactApplicationContext) :
       val name = child.name ?: continue
       rootChildrenByName[name] = child
     }
-    val tRootEnumMs = SystemClock.elapsedRealtime() - tRootEnum0
 
     var notebox = resolveOrCreateRootSubdir(root, NOTEBOX_DIR_NAME, rootChildrenByName)
     if (!notebox.isDirectory) {
       throw IllegalStateException(".notebox exists but is not a directory.")
     }
 
-    val tSettings0 = SystemClock.elapsedRealtime()
     var settingsDoc = notebox.findFile(SETTINGS_FILE_NAME)
     val resolver = reactContext.contentResolver
     if (settingsDoc == null || !settingsDoc.exists()) {
@@ -214,7 +266,6 @@ class VaultListingModule(private val reactContext: ReactApplicationContext) :
     if (raw.isBlank()) {
       throw IllegalStateException("settings.json is empty.")
     }
-    val tSettingsMs = SystemClock.elapsedRealtime() - tSettings0
 
     var inbox = resolveOrCreateRootSubdir(root, INBOX_DIR_NAME, rootChildrenByName)
     if (!inbox.isDirectory) {
@@ -226,20 +277,8 @@ class VaultListingModule(private val reactContext: ReactApplicationContext) :
       throw IllegalStateException("General exists but is not a directory.")
     }
 
-    val tInbox0 = SystemClock.elapsedRealtime()
     val inboxRows = collectMarkdownRows(inbox)
-    val tInboxMs = SystemClock.elapsedRealtime() - tInbox0
-
-    val tIndex0 = SystemClock.elapsedRealtime()
     writeInboxMarkdownIndex(general, inboxRows.map { it.name }, resolver)
-    val tIndexMs = SystemClock.elapsedRealtime() - tIndex0
-
-    val totalMs = SystemClock.elapsedRealtime() - sessionT0
-    Log.i(
-      TAG,
-      "prepareNoteboxSession: totalMs=$totalMs rootEnumMs=$tRootEnumMs settingsMs=$tSettingsMs " +
-        "inboxListMs=$tInboxMs inboxIndexMs=$tIndexMs inboxCount=${inboxRows.size}",
-    )
 
     val out = Arguments.createMap()
     out.putString("settings", raw)
@@ -272,9 +311,8 @@ class VaultListingModule(private val reactContext: ReactApplicationContext) :
   }
 
   /**
-   * Prefer direct child URI (same as JS path concat) so we avoid [DocumentFile.findFile] on huge
-   * directories (for example General with many podcast markdown files). Falls back to findFile
-   * when the composed URI does not resolve to the index file.
+   * Resolve `General/Inbox.md` using the already-open [generalDir] first ([findFile]), then
+   * [documentFileFromStorageUri] on the string-concat child URI, then [createFile].
    */
   private fun writeInboxMarkdownIndex(
     generalDir: DocumentFile,
@@ -282,16 +320,15 @@ class VaultListingModule(private val reactContext: ReactApplicationContext) :
     resolver: ContentResolver,
   ) {
     val body = buildInboxMarkdownIndexContent(markdownFileNames).toByteArray(StandardCharsets.UTF_8)
-    val directUri = childDocumentUri(generalDir.uri, INBOX_INDEX_FILE_NAME)
-    val directDoc = DocumentFile.fromSingleUri(reactContext, directUri)
-
+    val byName = generalDir.findFile(INBOX_INDEX_FILE_NAME)
     val target: DocumentFile =
-      if (directDoc != null && directDoc.exists() && directDoc.isFile) {
-        directDoc
+      if (byName != null && byName.exists() && byName.isFile) {
+        byName
       } else {
-        val found = generalDir.findFile(INBOX_INDEX_FILE_NAME)
+        val directUri = childDocumentUri(generalDir.uri, INBOX_INDEX_FILE_NAME)
+        val directDoc = documentFileFromStorageUri(directUri)
         when {
-          found != null && found.exists() && found.isFile -> found
+          directDoc != null && directDoc.exists() && directDoc.isFile -> directDoc
           else ->
             generalDir.createFile("text/markdown", INBOX_INDEX_FILE_NAME)
               ?: throw IllegalStateException("Could not create Inbox.md.")

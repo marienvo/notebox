@@ -55,6 +55,12 @@ describe('noteboxStorage', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    existsMock.mockReset();
+    listFilesMock.mockReset();
+    mkdirMock.mockReset();
+    readFileMock.mockReset();
+    writeFileMock.mockReset();
+    tryListMarkdownFilesNativeMock.mockReset();
     tryListMarkdownFilesNativeMock.mockResolvedValue(null);
   });
 
@@ -116,13 +122,26 @@ describe('noteboxStorage', () => {
       {lastModified: 22, name: 'newer.md', uri: `${baseUri}/Inbox/newer.md`},
       {lastModified: 11, name: 'older.md', uri: `${baseUri}/Inbox/older.md`},
     ]);
+    existsMock.mockResolvedValue(true);
+    listFilesMock.mockResolvedValueOnce([
+      {
+        lastModified: 22,
+        name: 'newer.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/newer.md`,
+      },
+      {
+        lastModified: 11,
+        name: 'older.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/older.md`,
+      },
+    ] as never);
 
     await expect(listNotes(baseUri)).resolves.toEqual([
       {lastModified: 22, name: 'newer.md', uri: `${baseUri}/Inbox/newer.md`},
       {lastModified: 11, name: 'older.md', uri: `${baseUri}/Inbox/older.md`},
     ]);
-    expect(existsMock).not.toHaveBeenCalled();
-    expect(listFilesMock).not.toHaveBeenCalled();
   });
 
   test('listNotes returns markdown files sorted by lastModified', async () => {
@@ -165,8 +184,26 @@ describe('noteboxStorage', () => {
     expect(listFilesMock).not.toHaveBeenCalled();
   });
 
-  test('listNotes falls back to JS listing when native returns empty but directory exists', async () => {
+  test('listNotes trusts native when it returns an empty list (directory scan succeeded)', async () => {
     tryListMarkdownFilesNativeMock.mockResolvedValueOnce([]);
+    existsMock.mockImplementation(
+      () => new Promise<boolean>(resolve => setImmediate(() => resolve(true))),
+    );
+    listFilesMock.mockResolvedValueOnce([
+      {
+        lastModified: 11,
+        name: 'note.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/note.md`,
+      },
+    ] as never);
+
+    await expect(listNotes(baseUri)).resolves.toEqual([]);
+    expect(listFilesMock).not.toHaveBeenCalled();
+  });
+
+  test('listNotes falls back to SAF when native returns null', async () => {
+    tryListMarkdownFilesNativeMock.mockResolvedValueOnce(null as unknown as never);
     existsMock.mockResolvedValue(true);
     listFilesMock.mockResolvedValueOnce([
       {
@@ -180,7 +217,6 @@ describe('noteboxStorage', () => {
     await expect(listNotes(baseUri)).resolves.toEqual([
       {lastModified: 11, name: 'note.md', uri: `${baseUri}/Inbox/note.md`},
     ]);
-    expect(existsMock).toHaveBeenCalledTimes(1);
     expect(existsMock).toHaveBeenCalledWith(`${baseUri}/Inbox`);
     expect(listFilesMock).toHaveBeenCalledWith(`${baseUri}/Inbox`);
   });
@@ -198,7 +234,21 @@ describe('noteboxStorage', () => {
       {lastModified: 2, name: 'b.md', uri: `${baseUri}/Inbox/b.md`},
       {lastModified: 1, name: 'a.md', uri: `${baseUri}/Inbox/a.md`},
     ]);
-    existsMock.mockResolvedValueOnce(false);
+    existsMock.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    listFilesMock.mockResolvedValueOnce([
+      {
+        lastModified: 2,
+        name: 'b.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/b.md`,
+      },
+      {
+        lastModified: 1,
+        name: 'a.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/a.md`,
+      },
+    ] as never);
 
     await expect(listInboxNotesAndSyncIndex(baseUri)).resolves.toEqual([
       {lastModified: 2, name: 'b.md', uri: `${baseUri}/Inbox/b.md`},
@@ -213,6 +263,38 @@ describe('noteboxStorage', () => {
       '# Inbox\n\n- [[Inbox/a|a]]\n- [[Inbox/b|b]]\n',
       {encoding: 'utf8', mimeType: 'text/markdown'},
     );
+  });
+
+  test('listInboxNotesAndSyncIndex skips Inbox.md write when content unchanged', async () => {
+    tryListMarkdownFilesNativeMock.mockResolvedValueOnce([
+      {lastModified: 2, name: 'b.md', uri: `${baseUri}/Inbox/b.md`},
+      {lastModified: 1, name: 'a.md', uri: `${baseUri}/Inbox/a.md`},
+    ]);
+    const expectedIndex = '# Inbox\n\n- [[Inbox/a|a]]\n- [[Inbox/b|b]]\n';
+    existsMock.mockResolvedValue(true);
+    listFilesMock.mockResolvedValueOnce([
+      {
+        lastModified: 2,
+        name: 'b.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/b.md`,
+      },
+      {
+        lastModified: 1,
+        name: 'a.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/a.md`,
+      },
+    ] as never);
+    readFileMock.mockResolvedValueOnce(expectedIndex);
+
+    await expect(listInboxNotesAndSyncIndex(baseUri)).resolves.toHaveLength(2);
+
+    expect(mkdirMock).not.toHaveBeenCalled();
+    expect(writeFileMock).not.toHaveBeenCalled();
+    expect(readFileMock).toHaveBeenCalledWith(`${baseUri}/General/Inbox.md`, {
+      encoding: 'utf8',
+    });
   });
 
   test('readNote reads markdown content by URI', async () => {
@@ -236,6 +318,15 @@ describe('noteboxStorage', () => {
         uri: `${baseUri}/General/2026 Demo - podcasts.md`,
       },
     ]);
+    existsMock.mockResolvedValue(true);
+    listFilesMock.mockResolvedValueOnce([
+      {
+        lastModified: 11,
+        name: '2026 Demo - podcasts.md',
+        type: 'file',
+        uri: `${baseUri}/General/2026 Demo - podcasts.md`,
+      },
+    ] as never);
 
     await expect(listGeneralMarkdownFiles(baseUri)).resolves.toEqual([
       {
@@ -244,8 +335,6 @@ describe('noteboxStorage', () => {
         uri: `${baseUri}/General/2026 Demo - podcasts.md`,
       },
     ]);
-    expect(existsMock).not.toHaveBeenCalled();
-    expect(listFilesMock).not.toHaveBeenCalled();
   });
 
   test('listGeneralMarkdownFiles returns markdown files from General folder', async () => {
@@ -367,7 +456,15 @@ describe('noteboxStorage', () => {
     tryListMarkdownFilesNativeMock.mockResolvedValueOnce([
       {lastModified: 1, name: 'a.md', uri: `${baseUri}/Inbox/a.md`},
     ]);
-    existsMock.mockResolvedValueOnce(false);
+    existsMock.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    listFilesMock.mockResolvedValueOnce([
+      {
+        lastModified: 1,
+        name: 'a.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/a.md`,
+      },
+    ] as never);
 
     await refreshInboxMarkdownIndex(baseUri);
 
