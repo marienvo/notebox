@@ -103,4 +103,4 @@ Contingency:
 
 ### Mitigation
 
-- On Android, copy renderable `content://` artwork to app cache on a **background native thread** via [`PodcastArtworkCacheModule`](../../android/app/src/main/java/com/notebox/PodcastArtworkCacheModule.kt) (`NoteboxPodcastArtworkCache.ensureLocalArtworkFile`), then display using a **`file://`** path (see [`androidPodcastArtworkCache.ts`](../../src/core/storage/androidPodcastArtworkCache.ts) and [`usePodcastArtworkDisplayUri.ts`](../../src/features/podcasts/hooks/usePodcastArtworkDisplayUri.ts)).
+- New downloads store artwork under app-internal `filesDir` as **`file://`** (`writeArtworkFile` in [`PodcastArtworkCacheModule`](../../android/app/src/main/java/com/notebox/PodcastArtworkCacheModule.kt)); **`Image` uses those URIs directly.** Legacy cached vault **`content://`** artwork is still copied to app cache on a **background native thread** via `ensureLocalArtworkFile` before display (see [`androidPodcastArtworkCache.ts`](../../src/core/storage/androidPodcastArtworkCache.ts) and [`usePodcastArtworkDisplayUri.ts`](../../src/features/podcasts/hooks/usePodcastArtworkDisplayUri.ts)).
