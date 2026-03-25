@@ -1,0 +1,12 @@
+---
+description: Supported platforms and explicit non-goals (Android, no iOS, future Linux desktop)
+alwaysApply: true
+---
+
+# Platform Targets
+
+- **Mobile:** Android only. Design, implement, and test for Android as the sole mobile platform.
+- **iOS / iPhone / iPad:** Not supported and **never** planned. Do not propose iOS work, App Store steps, or iOS-driven cross-platform compromises. Do not prioritize or sort backlog items for iPhone.
+- **Desktop (future):** A Linux desktop app is a possible later direction, with **Fedora Workstation** and **GNOME** as the reference environment. It is not part of the current mobile MVP unless a task explicitly says otherwise.
+
+When unsure, prefer Android-specific solutions and defer hypothetical multi-mobile or iOS portability. For product and architecture detail, see `specs/architecture/platform-targets.md`.

@@ -3,6 +3,8 @@ import 'react-native-gesture-handler';
  * @format
  */
 
+import './src/core/observability/registerSentry';
+
 import { AppRegistry } from 'react-native';
 import TrackPlayer from 'react-native-track-player';
 import App from './App';
