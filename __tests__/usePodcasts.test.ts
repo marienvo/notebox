@@ -5,7 +5,7 @@ import TestRenderer, {act} from 'react-test-renderer';
 import {
   clearPlaylist,
   listGeneralMarkdownFiles,
-  readPlaylist,
+  readPlaylistCoalesced,
   readPodcastFileContent,
 } from '../src/core/storage/noteboxStorage';
 import {useVaultContext} from '../src/core/vault/VaultContext';
@@ -26,7 +26,7 @@ import {PodcastEpisode} from '../src/types';
 jest.mock('../src/core/storage/noteboxStorage', () => ({
   clearPlaylist: jest.fn(),
   listGeneralMarkdownFiles: jest.fn(),
-  readPlaylist: jest.fn(),
+  readPlaylistCoalesced: jest.fn(),
   readPodcastFileContent: jest.fn(),
 }));
 
@@ -110,7 +110,9 @@ describe('usePodcasts loading lifecycle', () => {
   const clearPlaylistMock = clearPlaylist as jest.MockedFunction<typeof clearPlaylist>;
   const listGeneralMarkdownFilesMock =
     listGeneralMarkdownFiles as jest.MockedFunction<typeof listGeneralMarkdownFiles>;
-  const readPlaylistMock = readPlaylist as jest.MockedFunction<typeof readPlaylist>;
+  const readPlaylistMock = readPlaylistCoalesced as jest.MockedFunction<
+    typeof readPlaylistCoalesced
+  >;
   const readPodcastFileContentMock =
     readPodcastFileContent as jest.MockedFunction<typeof readPodcastFileContent>;
   const useVaultContextMock = useVaultContext as jest.MockedFunction<

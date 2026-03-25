@@ -4,7 +4,7 @@ import {InteractionManager} from 'react-native';
 import {
   clearPlaylist,
   listGeneralMarkdownFiles,
-  readPlaylist,
+  readPlaylistCoalesced,
   readPodcastFileContent,
 } from '../../../core/storage/noteboxStorage';
 import {PodcastEpisode, PodcastSection, RootMarkdownFile} from '../../../types';
@@ -361,7 +361,7 @@ export function usePodcasts(): UsePodcastsResult {
       }
 
       const runPlaylistHousekeeping = async () => {
-        const playlistEntry = await readPlaylist(baseUri);
+        const playlistEntry = await readPlaylistCoalesced(baseUri);
         if (!playlistEntry) {
           return;
         }

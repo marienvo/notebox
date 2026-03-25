@@ -42,7 +42,10 @@ describe('resolveInitialRoute', () => {
   test('returns Setup when no URI is saved', async () => {
     asyncStorageMock.getItem.mockResolvedValueOnce(null);
 
-    await expect(resolveInitialRoute()).resolves.toBe('Setup');
+    await expect(resolveInitialRoute()).resolves.toEqual({
+      route: 'Setup',
+      savedUri: null,
+    });
     expect(hasPermissionMock).not.toHaveBeenCalled();
   });
 
@@ -50,7 +53,10 @@ describe('resolveInitialRoute', () => {
     asyncStorageMock.getItem.mockResolvedValueOnce('content://test-uri');
     hasPermissionMock.mockResolvedValueOnce(true);
 
-    await expect(resolveInitialRoute()).resolves.toBe('MainTabs');
+    await expect(resolveInitialRoute()).resolves.toEqual({
+      route: 'MainTabs',
+      savedUri: 'content://test-uri',
+    });
     expect(hasPermissionMock).toHaveBeenCalledWith('content://test-uri');
     expect(asyncStorageMock.removeItem).not.toHaveBeenCalled();
   });
@@ -59,7 +65,10 @@ describe('resolveInitialRoute', () => {
     asyncStorageMock.getItem.mockResolvedValueOnce('content://test-uri');
     hasPermissionMock.mockResolvedValueOnce(false);
 
-    await expect(resolveInitialRoute()).resolves.toBe('Setup');
+    await expect(resolveInitialRoute()).resolves.toEqual({
+      route: 'Setup',
+      savedUri: null,
+    });
     expect(hasPermissionMock).toHaveBeenCalledWith('content://test-uri');
     expect(asyncStorageMock.removeItem).toHaveBeenCalledWith(
       NOTES_DIRECTORY_URI_KEY,

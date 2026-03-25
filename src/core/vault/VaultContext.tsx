@@ -11,10 +11,10 @@ import {
 
 import {appBreadcrumb, reportUnexpectedError, syncVaultSessionContext} from '../observability';
 import {elapsedMsSinceJsBundleEval} from '../observability/startupTiming';
-import {tryPrepareNoteboxSessionNative} from '../storage/androidVaultListing';
 import {getSavedUri} from '../storage/appStorage';
-import {initNotebox, parseNoteboxSettings, readSettings} from '../storage/noteboxStorage';
+import {clearAllPlaylistReadCoalescer} from '../storage/noteboxStorage';
 import {NoteboxSettings, NoteSummary} from '../../types';
+import {prepareVaultSession} from './applyVaultSession';
 
 type VaultContextValue = {
   baseUri: string | null;
@@ -30,13 +30,24 @@ const VaultContext = createContext<VaultContextValue | null>(null);
 
 type VaultProviderProps = {
   children: ReactNode;
+  initialSession?: {
+    uri: string;
+    settings: NoteboxSettings;
+    inboxPrefetch: NoteSummary[] | null;
+  } | null;
 };
 
-export function VaultProvider({children}: VaultProviderProps) {
-  const [baseUri, setBaseUri] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [settings, setSettings] = useState<NoteboxSettings | null>(null);
-  const inboxPrefetchRef = useRef<{notes: NoteSummary[]; uri: string} | null>(null);
+export function VaultProvider({children, initialSession}: VaultProviderProps) {
+  const [baseUri, setBaseUri] = useState<string | null>(initialSession?.uri ?? null);
+  const [isLoading, setIsLoading] = useState<boolean>(initialSession != null ? false : true);
+  const [settings, setSettings] = useState<NoteboxSettings | null>(
+    initialSession?.settings ?? null,
+  );
+  const inboxPrefetchRef = useRef<{notes: NoteSummary[]; uri: string} | null>(
+    initialSession?.inboxPrefetch
+      ? {uri: initialSession.uri, notes: initialSession.inboxPrefetch}
+      : null,
+  );
 
   const consumeInboxPrefetch = useCallback((forUri: string): NoteSummary[] | null => {
     const pending = inboxPrefetchRef.current;
@@ -49,39 +60,14 @@ export function VaultProvider({children}: VaultProviderProps) {
 
   const applyVaultSessionUri = useCallback(async (nextUri: string) => {
     inboxPrefetchRef.current = null;
-    appBreadcrumb({
-      category: 'vault',
-      message: 'session.apply.start',
-      data: {},
-    });
-    let nextSettings: NoteboxSettings;
-    let sessionPrep: 'native' | 'legacy' = 'legacy';
-    let hasInboxPrefetch = false;
-    try {
-      const prepared = await tryPrepareNoteboxSessionNative(nextUri);
-      if (prepared !== null) {
-        nextSettings = parseNoteboxSettings(prepared.settingsJson);
-        sessionPrep = 'native';
-        if (prepared.inboxPrefetch !== null) {
-          inboxPrefetchRef.current = {uri: nextUri, notes: prepared.inboxPrefetch};
-          hasInboxPrefetch = true;
-        }
-      } else {
-        await initNotebox(nextUri);
-        nextSettings = await readSettings(nextUri);
-      }
-    } catch {
-      await initNotebox(nextUri);
-      nextSettings = await readSettings(nextUri);
-      sessionPrep = 'legacy';
+
+    const prepared = await prepareVaultSession(nextUri);
+    if (prepared.inboxPrefetch !== null) {
+      inboxPrefetchRef.current = {uri: nextUri, notes: prepared.inboxPrefetch};
     }
+
     setBaseUri(nextUri);
-    setSettings(nextSettings);
-    appBreadcrumb({
-      category: 'vault',
-      message: 'session.apply.complete',
-      data: {has_inbox_prefetch: hasInboxPrefetch, session_prep: sessionPrep},
-    });
+    setSettings(prepared.settings);
   }, []);
 
   const setSessionUri = useCallback(
@@ -90,10 +76,12 @@ export function VaultProvider({children}: VaultProviderProps) {
         inboxPrefetchRef.current = null;
         setBaseUri(null);
         setSettings(null);
+        clearAllPlaylistReadCoalescer();
         return;
       }
 
       try {
+        clearAllPlaylistReadCoalescer();
         await applyVaultSessionUri(nextUri);
       } catch (error) {
         reportUnexpectedError(error, {flow: 'vault_session', step: 'apply'});
@@ -155,8 +143,37 @@ export function VaultProvider({children}: VaultProviderProps) {
   }, [applyVaultSessionUri]);
 
   useEffect(() => {
-    refreshSession().catch(() => undefined);
-  }, [refreshSession]);
+    let isActive = true;
+
+    const hydrateInitialSessionOrRefresh = async () => {
+      if (initialSession == null) {
+        await refreshSession();
+        return;
+      }
+
+      try {
+        const savedUri = await getSavedUri();
+        if (!isActive) {
+          return;
+        }
+
+        if (savedUri && savedUri.trim() === initialSession.uri.trim()) {
+          return;
+        }
+      } catch {
+        // If savedUri read fails, keep existing initial session if present.
+        return;
+      }
+
+      await refreshSession();
+    };
+
+    hydrateInitialSessionOrRefresh().catch(() => undefined);
+
+    return () => {
+      isActive = false;
+    };
+  }, [initialSession, refreshSession]);
 
   useEffect(() => {
     syncVaultSessionContext(Boolean(baseUri));

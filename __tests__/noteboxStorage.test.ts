@@ -14,6 +14,7 @@ import {tryListMarkdownFilesNative} from '../src/core/storage/androidVaultListin
 import {
   buildInboxMarkdownIndexContent,
   clearPlaylist,
+  readPlaylistCoalesced,
   createNote,
   isNoteUriInInbox,
   listGeneralMarkdownFiles,
@@ -26,6 +27,7 @@ import {
   initNotebox,
   readSettings,
   refreshInboxMarkdownIndex,
+  resetPlaylistReadCoalescerForTesting,
   writePlaylist,
   writeNoteContent,
   writeSettings,
@@ -55,6 +57,7 @@ describe('noteboxStorage', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    resetPlaylistReadCoalescerForTesting();
     existsMock.mockReset();
     listFilesMock.mockReset();
     mkdirMock.mockReset();
@@ -531,6 +534,28 @@ describe('noteboxStorage', () => {
       mp3Url: 'https://example.com/episode-a.mp3',
       positionMs: 250,
     });
+  });
+
+  test('readPlaylistCoalesced coalesces concurrent reads', async () => {
+    existsMock.mockResolvedValueOnce(true);
+    readFileMock.mockResolvedValueOnce(
+      '{"durationMs":1000,"episodeId":"episode-a","mp3Url":"https://example.com/episode-a.mp3","positionMs":250}',
+    );
+
+    const [a, b] = await Promise.all([
+      readPlaylistCoalesced(baseUri),
+      readPlaylistCoalesced(baseUri),
+    ]);
+
+    expect(existsMock).toHaveBeenCalledTimes(1);
+    expect(readFileMock).toHaveBeenCalledTimes(1);
+    expect(a).toEqual({
+      durationMs: 1000,
+      episodeId: 'episode-a',
+      mp3Url: 'https://example.com/episode-a.mp3',
+      positionMs: 250,
+    });
+    expect(b).toEqual(a);
   });
 
   test('clearPlaylist empties existing playlist file', async () => {

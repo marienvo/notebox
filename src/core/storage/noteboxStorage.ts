@@ -28,6 +28,8 @@ const SYNC_CONFLICT_MARKER = 'sync-conflict';
 const defaultSettings: NoteboxSettings = {
   displayName: 'My Notebox',
 };
+
+const playlistReadCoalescer = new Map<string, Promise<PlaylistEntry | null>>();
 /** AsyncStorage-backed mock vault; never SAF. */
 function isDevMockVaultBaseUri(baseUri: string): boolean {
   return baseUri.trim() === DEV_MOCK_VAULT_URI;
@@ -194,7 +196,7 @@ async function listMarkdownFilesInDirectory(
       resolve(rows);
     };
 
-    void (async () => {
+    (async () => {
       try {
         const rows = await listMarkdownFilesViaSaf(directoryUri, () => settled);
         if (!settled) {
@@ -207,7 +209,7 @@ async function listMarkdownFilesInDirectory(
       }
     })();
 
-    void (async () => {
+    (async () => {
       const native = await tryListMarkdownFilesNative(directoryUri);
       if (!settled && native !== null) {
         settle(native);
@@ -529,6 +531,45 @@ export async function readPlaylist(baseUri: string): Promise<PlaylistEntry | nul
   return parsed;
 }
 
+/**
+ * Coalesces concurrent `readPlaylist` calls per baseUri.
+ *
+ * Unlike a simple in-flight cache that gets deleted on settle, we intentionally keep the settled
+ * promise so a bootstrap “prime” can be reused by `usePlayer` without a second SAF roundtrip.
+ */
+export async function readPlaylistCoalesced(
+  baseUri: string,
+): Promise<PlaylistEntry | null> {
+  const cacheKey = baseUri.trim();
+  if (!cacheKey) {
+    return readPlaylist(baseUri);
+  }
+
+  const existing = playlistReadCoalescer.get(cacheKey);
+  if (existing) {
+    return existing;
+  }
+
+  const promise = readPlaylist(baseUri);
+  playlistReadCoalescer.set(cacheKey, promise);
+  return promise;
+}
+
+export function clearPlaylistReadCoalescerForBaseUri(baseUri: string): void {
+  playlistReadCoalescer.delete(baseUri.trim());
+}
+
+export function clearAllPlaylistReadCoalescer(): void {
+  playlistReadCoalescer.clear();
+}
+
+/**
+ * Clears the playlist coalescer (in-memory) to avoid cross-test pollution.
+ */
+export function resetPlaylistReadCoalescerForTesting(): void {
+  playlistReadCoalescer.clear();
+}
+
 export async function writePlaylist(
   baseUri: string,
   entry: PlaylistEntry,
@@ -536,10 +577,12 @@ export async function writePlaylist(
   if (isDevMockVaultBaseUri(baseUri)) {
     const devStorage = getDevStorage();
     await devStorage.writePlaylist(baseUri, entry);
+    playlistReadCoalescer.set(baseUri.trim(), Promise.resolve(entry));
     return;
   }
 
   const normalizedBaseUri = normalizeBaseUri(baseUri);
+  const cacheKey = normalizedBaseUri;
   const noteboxDirectoryUri = getNoteboxDirectoryUri(normalizedBaseUri);
   const playlistUri = getPlaylistUri(normalizedBaseUri);
 
@@ -551,16 +594,20 @@ export async function writePlaylist(
     encoding: 'utf8',
     mimeType: 'application/json',
   });
+
+  playlistReadCoalescer.set(cacheKey, Promise.resolve(entry));
 }
 
 export async function clearPlaylist(baseUri: string): Promise<void> {
   if (isDevMockVaultBaseUri(baseUri)) {
     const devStorage = getDevStorage();
     await devStorage.clearPlaylist(baseUri);
+    playlistReadCoalescer.set(baseUri.trim(), Promise.resolve(null));
     return;
   }
 
   const normalizedBaseUri = normalizeBaseUri(baseUri);
+  const cacheKey = normalizedBaseUri;
   const playlistUri = getPlaylistUri(normalizedBaseUri);
 
   if (!(await exists(playlistUri))) {
@@ -571,6 +618,8 @@ export async function clearPlaylist(baseUri: string): Promise<void> {
     encoding: 'utf8',
     mimeType: 'application/json',
   });
+
+  playlistReadCoalescer.set(cacheKey, Promise.resolve(null));
 }
 
 /**
