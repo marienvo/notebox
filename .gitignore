@@ -38,6 +38,9 @@ local.properties
 # Env (local secrets / Sentry DSN — copy from .env.example)
 .env
 
+# Local release bump state (see scripts/bump-release-version.mjs)
+.local/
+
 # node.js
 #
 node_modules/

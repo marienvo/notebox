@@ -94,3 +94,13 @@ Contingency:
 - Kotlin throws instead of returning an empty array when `DocumentFile` reports the directory missing, so JS can fall back when native cannot open the tree URI reliably.
 - Keep listing rules aligned: markdown suffix, exclude filenames containing `sync-conflict`, sort by `lastModified` descending (see Kotlin `VaultListingModule`).
 - Validate on a physical Android device after changes; iOS is unchanged and always uses the JS path.
+
+## 8) Podcast artwork `content://` and main-thread ANRs (Medium — mitigated)
+
+### Risk
+
+- Showing vault podcast artwork via React Native `Image` using SAF **`content://`** URIs can cause **ANRs**: the stack may show the main thread blocked in `ContentResolver` (for example `getType`) under Fresco while `ReactImageView` lays out.
+
+### Mitigation
+
+- On Android, copy renderable `content://` artwork to app cache on a **background native thread** via [`PodcastArtworkCacheModule`](../../android/app/src/main/java/com/notebox/PodcastArtworkCacheModule.kt) (`NoteboxPodcastArtworkCache.ensureLocalArtworkFile`), then display using a **`file://`** path (see [`androidPodcastArtworkCache.ts`](../../src/core/storage/androidPodcastArtworkCache.ts) and [`usePodcastArtworkDisplayUri.ts`](../../src/features/podcasts/hooks/usePodcastArtworkDisplayUri.ts)).

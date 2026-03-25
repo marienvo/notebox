@@ -1,9 +1,10 @@
 import {Box, Pressable, Text, useColorMode} from '@gluestack-ui/themed';
-import {Image, StyleSheet, View} from 'react-native';
+import {StyleSheet, View} from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 import {useVaultContext} from '../../../core/vault/VaultContext';
 import {usePlayerContext} from '../context/PlayerContext';
+import {PodcastArtworkImage} from './PodcastArtworkImage';
 import {usePodcastArtwork} from '../hooks/usePodcastArtwork';
 
 function formatProgress(positionMs: number, durationMs: number | null): string {
@@ -67,13 +68,11 @@ export function MiniPlayer() {
         },
       ]}>
       <View style={styles.topRow}>
-        {artworkUri ? (
-          <Image source={{uri: artworkUri}} style={styles.artwork} />
-        ) : (
-          <View style={styles.artworkPlaceholder}>
-            <MaterialIcons color="#8f8f8f" name="music-note" size={20} />
-          </View>
-        )}
+        <PodcastArtworkImage
+          artworkUri={artworkUri}
+          imageStyle={styles.artwork}
+          placeholderStyle={styles.artworkPlaceholder}
+        />
         <View style={styles.textWrap}>
           <Text numberOfLines={1} style={styles.title}>
             {activeEpisode.title}

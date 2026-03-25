@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+node "$ROOT/scripts/bump-release-version.mjs"
+
 # Prefer a full JDK with jmods so Gradle's toolchain probe can detect JAVA_COMPILER.
 # The Red Hat openjdk packages on Fedora/RHEL ship without jmods by default, which
 # causes Gradle 8 to report "does not provide the required capabilities: [JAVA_COMPILER]".

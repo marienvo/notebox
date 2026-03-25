@@ -120,6 +120,13 @@ After phase 1 state is rendered:
 
 - `EpisodeRow` resolves artwork using `episode.rssFeedUrl` and falls back to `section.rssFeedUrl` when the episode has no URL after enrichment (belt-and-suspenders with the dual-key enrich step).
 
+### Artwork display (Android ANR mitigation)
+
+- Resolved artwork URIs may point at vault files as SAF **`content://…/document/…`** strings (see `writePodcastImageFile` / `buildSafDocumentUri` in [`noteboxStorage.ts`](../../src/core/storage/noteboxStorage.ts)).
+- **Do not pass those `content://` URIs directly to React Native `Image`.** Fresco can trigger synchronous `ContentResolver` work on the UI thread during layout, which risks **ANRs** on some devices.
+- Instead, `PodcastArtworkImage` uses `usePodcastArtworkDisplayUri`, which calls the Android native module **`NoteboxPodcastArtworkCache`** (`ensureLocalArtworkFile`) to copy the bytes to **`context.cacheDir/podcast-artwork/`** on a **background thread** and passes a **`file://`** URI to `Image`. Remote `http(s)` URIs are unchanged.
+- In-memory deduplication lives in [`androidPodcastArtworkCache.ts`](../../src/core/storage/androidPodcastArtworkCache.ts) so list rows do not repeat copies for the same content URI.
+
 ## Artwork Resolution Rules
 
 Given `baseUri` and `rssFeedUrl`:
