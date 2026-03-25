@@ -1,5 +1,6 @@
 import {NativeModules, Platform} from 'react-native';
 
+import {DEV_MOCK_VAULT_URI} from '../src/dev/mockVaultData';
 import {tryPrepareNoteboxSessionNative} from '../src/core/storage/androidVaultListing';
 
 describe('tryPrepareNoteboxSessionNative', () => {
@@ -61,6 +62,15 @@ describe('tryPrepareNoteboxSessionNative', () => {
     prepare.mockResolvedValue({inboxNotes: []});
 
     await expect(tryPrepareNoteboxSessionNative('content://root')).resolves.toBeNull();
+  });
+
+  it('returns null for dev mock vault URI without calling native (AsyncStorage-backed inbox)', async () => {
+    const prepare = (
+      NativeModules.NoteboxVaultListing as {prepareNoteboxSession: jest.Mock}
+    ).prepareNoteboxSession;
+
+    await expect(tryPrepareNoteboxSessionNative(DEV_MOCK_VAULT_URI)).resolves.toBeNull();
+    expect(prepare).not.toHaveBeenCalled();
   });
 
   it('maps null lastModified to null in summaries', async () => {

@@ -1,5 +1,6 @@
 import {NativeModules, Platform} from 'react-native';
 
+import {DEV_MOCK_VAULT_URI} from '../../dev/mockVaultData';
 import {NoteSummary} from '../../types';
 
 type NativeVaultListingModule = {
@@ -79,6 +80,12 @@ export async function tryPrepareNoteboxSessionNative(
   baseUri: string,
 ): Promise<PreparedNoteboxSessionNative | null> {
   if (Platform.OS !== 'android') {
+    return null;
+  }
+
+  // Dev mock vault lives in AsyncStorage, not SAF. Native prepare can return an empty inbox
+  // prefetch; `useNotes` treats `[]` as a hit and skips `listInboxNotesAndSyncIndex`, hiding notes.
+  if (baseUri.trim() === DEV_MOCK_VAULT_URI) {
     return null;
   }
 

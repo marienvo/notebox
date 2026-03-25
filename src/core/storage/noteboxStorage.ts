@@ -7,6 +7,7 @@ import {
 } from 'react-native-saf-x';
 
 import {tryListMarkdownFilesNative} from './androidVaultListing';
+import {DEV_MOCK_VAULT_URI} from '../../dev/mockVaultData';
 import {
   NoteDetail,
   NoteSummary,
@@ -27,10 +28,18 @@ const SYNC_CONFLICT_MARKER = 'sync-conflict';
 const defaultSettings: NoteboxSettings = {
   displayName: 'My Notebox',
 };
-const isDevMockVaultEnabled =
-  __DEV__ &&
-  !(globalThis as {process?: {env?: Record<string, string | undefined>}}).process
-    ?.env?.JEST_WORKER_ID;
+/** AsyncStorage-backed mock vault; never SAF. */
+function isDevMockVaultBaseUri(baseUri: string): boolean {
+  return baseUri.trim() === DEV_MOCK_VAULT_URI;
+}
+
+function isDevMockVaultScopedUri(uri: string): boolean {
+  const normalized = uri.trim();
+  return (
+    normalized === DEV_MOCK_VAULT_URI ||
+    normalized.startsWith(`${DEV_MOCK_VAULT_URI}/`)
+  );
+}
 
 function getDevStorage() {
   return require('../../dev/devStorage') as typeof import('../../dev/devStorage');
@@ -205,7 +214,7 @@ export function parseNoteboxSettings(rawSettings: string): NoteboxSettings {
 }
 
 export async function initNotebox(baseUri: string): Promise<void> {
-  if (isDevMockVaultEnabled) {
+  if (isDevMockVaultBaseUri(baseUri)) {
     const devStorage = getDevStorage();
     await devStorage.initNotebox(baseUri);
     return;
@@ -228,7 +237,7 @@ export async function initNotebox(baseUri: string): Promise<void> {
 }
 
 export async function readSettings(baseUri: string): Promise<NoteboxSettings> {
-  if (isDevMockVaultEnabled) {
+  if (isDevMockVaultBaseUri(baseUri)) {
     const devStorage = getDevStorage();
     return devStorage.readSettings(baseUri);
   }
@@ -244,7 +253,7 @@ export async function writeSettings(
   baseUri: string,
   settings: NoteboxSettings,
 ): Promise<void> {
-  if (isDevMockVaultEnabled) {
+  if (isDevMockVaultBaseUri(baseUri)) {
     const devStorage = getDevStorage();
     await devStorage.writeSettings(baseUri, settings);
     return;
@@ -260,7 +269,7 @@ export async function writeSettings(
 }
 
 export async function listNotes(baseUri: string): Promise<NoteSummary[]> {
-  if (isDevMockVaultEnabled) {
+  if (isDevMockVaultBaseUri(baseUri)) {
     const devStorage = getDevStorage();
     return devStorage.listNotes(baseUri);
   }
@@ -276,7 +285,7 @@ export async function listNotes(baseUri: string): Promise<NoteSummary[]> {
  * Prefer this over `listNotes` + `refreshInboxMarkdownIndex` to avoid duplicate SAF work.
  */
 export async function listInboxNotesAndSyncIndex(baseUri: string): Promise<NoteSummary[]> {
-  if (isDevMockVaultEnabled) {
+  if (isDevMockVaultBaseUri(baseUri)) {
     const devStorage = getDevStorage();
     return devStorage.listInboxNotesAndSyncIndex(baseUri);
   }
@@ -295,7 +304,7 @@ export async function listInboxNotesAndSyncIndex(baseUri: string): Promise<NoteS
 export async function listGeneralMarkdownFiles(
   baseUri: string,
 ): Promise<RootMarkdownFile[]> {
-  if (isDevMockVaultEnabled) {
+  if (isDevMockVaultBaseUri(baseUri)) {
     const devStorage = getDevStorage();
     return devStorage.listGeneralMarkdownFiles(baseUri);
   }
@@ -332,7 +341,7 @@ async function writeInboxMarkdownIndexFromMarkdownFileNames(
 }
 
 export async function refreshInboxMarkdownIndex(baseUri: string): Promise<void> {
-  if (isDevMockVaultEnabled) {
+  if (isDevMockVaultBaseUri(baseUri)) {
     const devStorage = getDevStorage();
     await devStorage.refreshInboxMarkdownIndex(baseUri);
     return;
@@ -349,7 +358,7 @@ export async function refreshInboxMarkdownIndex(baseUri: string): Promise<void> 
 }
 
 export async function readNote(noteUri: string): Promise<NoteDetail> {
-  if (isDevMockVaultEnabled) {
+  if (isDevMockVaultScopedUri(noteUri)) {
     const devStorage = getDevStorage();
     return devStorage.readNote(noteUri);
   }
@@ -368,7 +377,7 @@ export async function readNote(noteUri: string): Promise<NoteDetail> {
 }
 
 export async function readPodcastFileContent(fileUri: string): Promise<string> {
-  if (isDevMockVaultEnabled) {
+  if (isDevMockVaultScopedUri(fileUri)) {
     const devStorage = getDevStorage();
     return devStorage.readPodcastFileContent(fileUri);
   }
@@ -381,7 +390,7 @@ export async function writePodcastFileContent(
   fileUri: string,
   content: string,
 ): Promise<void> {
-  if (isDevMockVaultEnabled) {
+  if (isDevMockVaultScopedUri(fileUri)) {
     const devStorage = getDevStorage();
     await devStorage.writePodcastFileContent(fileUri, content);
     return;
@@ -401,7 +410,7 @@ export async function createNote(
   title: string,
   content: string,
 ): Promise<NoteSummary> {
-  if (isDevMockVaultEnabled) {
+  if (isDevMockVaultBaseUri(baseUri)) {
     const devStorage = getDevStorage();
     return devStorage.createNote(baseUri, title, content);
   }
@@ -436,7 +445,7 @@ export async function writeNoteContent(
   noteUri: string,
   content: string,
 ): Promise<void> {
-  if (isDevMockVaultEnabled) {
+  if (isDevMockVaultScopedUri(noteUri)) {
     const devStorage = getDevStorage();
     await devStorage.writeNoteContent(noteUri, content);
     return;
@@ -452,7 +461,7 @@ export async function writeNoteContent(
 }
 
 export async function readPlaylist(baseUri: string): Promise<PlaylistEntry | null> {
-  if (isDevMockVaultEnabled) {
+  if (isDevMockVaultBaseUri(baseUri)) {
     const devStorage = getDevStorage();
     return devStorage.readPlaylist(baseUri);
   }
@@ -481,7 +490,7 @@ export async function writePlaylist(
   baseUri: string,
   entry: PlaylistEntry,
 ): Promise<void> {
-  if (isDevMockVaultEnabled) {
+  if (isDevMockVaultBaseUri(baseUri)) {
     const devStorage = getDevStorage();
     await devStorage.writePlaylist(baseUri, entry);
     return;
@@ -502,7 +511,7 @@ export async function writePlaylist(
 }
 
 export async function clearPlaylist(baseUri: string): Promise<void> {
-  if (isDevMockVaultEnabled) {
+  if (isDevMockVaultBaseUri(baseUri)) {
     const devStorage = getDevStorage();
     await devStorage.clearPlaylist(baseUri);
     return;
@@ -531,7 +540,7 @@ export async function safUriExists(uri: string): Promise<boolean> {
     return false;
   }
 
-  if (isDevMockVaultEnabled) {
+  if (isDevMockVaultScopedUri(normalizedUri)) {
     const devStorage = getDevStorage();
     return devStorage.safUriExists(normalizedUri);
   }

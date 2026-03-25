@@ -172,7 +172,7 @@ async function writePodcastIndex(index: PodcastIndex): Promise<void> {
 async function ensureSeeded(): Promise<void> {
   const seeded = await AsyncStorage.getItem(DEV_SEEDED_KEY);
 
-  if (seeded === '4') {
+  if (seeded === '5') {
     return;
   }
 
@@ -197,7 +197,7 @@ async function ensureSeeded(): Promise<void> {
   await writeNotesIndex(notesIndex);
   await writePodcastIndex(podcastIndex);
   await AsyncStorage.setItem(DEV_SETTINGS_KEY, serializeSettings(MOCK_SETTINGS));
-  await AsyncStorage.setItem(DEV_SEEDED_KEY, '4');
+  await AsyncStorage.setItem(DEV_SEEDED_KEY, '5');
 }
 
 function assertMockBaseUri(baseUri: string): void {
