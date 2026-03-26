@@ -2,10 +2,11 @@
  * @format
  */
 
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {
   ActivityIndicator,
-  Image,
+  Animated,
+  Easing,
   StatusBar,
   StyleSheet,
   useColorScheme,
@@ -38,10 +39,47 @@ type VaultInitialSession = {
   inboxPrefetch: NoteSummary[] | null;
 };
 
+/** Positive offset: logo starts slightly below and moves up into place. */
+const STARTUP_LOGO_SLIDE_PX = 0;
+const STARTUP_LOGO_ANIM_MS = 480;
+const STARTUP_SPINNER_FADE_MS = 400;
+const STARTUP_SPINNER_DELAY_MS = 90;
+
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
   const [initialRoute, setInitialRoute] = useState<InitialRoute | null>(null);
   const [initialSession, setInitialSession] = useState<VaultInitialSession | null>(null);
+
+  const startupLogoOpacity = useRef(new Animated.Value(0)).current;
+  const startupLogoTranslateY = useRef(new Animated.Value(STARTUP_LOGO_SLIDE_PX)).current;
+  const startupSpinnerOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const easing = Easing.out(Easing.cubic);
+    Animated.parallel([
+      Animated.timing(startupLogoOpacity, {
+        toValue: 1,
+        duration: STARTUP_LOGO_ANIM_MS,
+        easing,
+        useNativeDriver: true,
+      }),
+      Animated.timing(startupLogoTranslateY, {
+        toValue: 0,
+        duration: STARTUP_LOGO_ANIM_MS,
+        easing,
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.delay(STARTUP_SPINNER_DELAY_MS),
+        Animated.timing(startupSpinnerOpacity, {
+          toValue: 1,
+          duration: STARTUP_SPINNER_FADE_MS,
+          easing,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+  }, [startupLogoOpacity, startupLogoTranslateY, startupSpinnerOpacity]);
 
   useEffect(() => {
     let isActive = true;
@@ -170,14 +208,28 @@ function App() {
                 styles.loadingContainer,
                 isDarkMode ? styles.loadingContainerDark : styles.loadingContainerLight,
               ]}>
-              <Image
+              <View style={styles.startupLogoVerticalBalance} />
+              <Animated.Image
                 accessibilityIgnoresInvertColors
                 accessibilityLabel="Notebox"
                 resizeMode="contain"
                 source={require('./src/assets/notebox-logo.png')}
-                style={styles.startupLogo}
+                style={[
+                  styles.startupLogo,
+                  {
+                    opacity: startupLogoOpacity,
+                    transform: [{translateY: startupLogoTranslateY}],
+                  },
+                ]}
               />
-              <ActivityIndicator color={isDarkMode ? '#ffffff' : '#333333'} style={styles.startupSpinner} />
+              <View style={styles.startupSpinnerSlot}>
+                <Animated.View style={{opacity: startupSpinnerOpacity}}>
+                  <ActivityIndicator
+                    color={isDarkMode ? '#ffffff' : '#333333'}
+                    style={styles.startupSpinner}
+                  />
+                </Animated.View>
+              </View>
             </View>
           ) : (
             <VaultProvider initialSession={initialSession}>
@@ -197,7 +249,18 @@ const styles = StyleSheet.create({
   loadingContainer: {
     alignItems: 'center',
     flex: 1,
-    justifyContent: 'center',
+  },
+  /** Equal flex regions so the logo sits on the vertical midline; spinner lives below without shifting the logo. */
+  startupLogoVerticalBalance: {
+    paddingTop: 10,
+    flex: 1,
+  },
+  startupSpinnerSlot: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'flex-start',
+    paddingTop: 24,
+    width: '100%',
   },
   loadingContainerDark: {
     backgroundColor: '#121212',
@@ -206,12 +269,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   startupLogo: {
-    height: 120,
-    width: 120,
+    height: 180,
+    width: 180,
   },
-  startupSpinner: {
-    marginTop: 24,
-  },
+  startupSpinner: {},
 });
 
 export default App;
