@@ -25,9 +25,19 @@ For every mutation, the app follows a two-step process:
 
 For create specifically:
 
-1. `createNote(baseUri, title, content)` writes the note and updates index content.
+1. `createNote(baseUri, title, content, occupiedNames?)` picks a unique markdown basename before write:
+   - first try `stem.md`
+   - then `stem-2.md`, `stem-3.md`, ...
+   - never chain suffixes like `stem-1-1.md`
 2. The notes list adds or replaces the created `NoteSummary` in memory and sorts by `lastModified` descending.
 3. A silent background refresh calls `listInboxNotesAndSyncIndex(baseUri)` to reconcile with disk.
+
+## Create collision strategy
+
+- The default path uses already-loaded notes as the occupied-name set, so common collisions are solved without an extra SAF directory scan.
+- Before writing, storage checks whether the chosen target URI already exists.
+- If it exists (projection stale vs disk), storage does one Inbox listing, rebuilds occupied names from disk, picks the next unique name, and writes.
+- This keeps overwrite protection deterministic while avoiding extra SAF work in the normal case.
 
 ## Why this exists
 

@@ -16,6 +16,7 @@ import {
   clearPlaylist,
   readPlaylistCoalesced,
   createNote,
+  pickNextInboxMarkdownFileName,
   isNoteUriInInbox,
   listGeneralMarkdownFiles,
   listInboxNotesAndSyncIndex,
@@ -393,7 +394,10 @@ describe('noteboxStorage', () => {
   });
 
   test('createNote sanitizes title and writes markdown content', async () => {
-    existsMock.mockResolvedValueOnce(false).mockResolvedValue(true);
+    existsMock
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValue(true);
     listFilesMock.mockResolvedValueOnce([
       {
         lastModified: 1,
@@ -420,6 +424,122 @@ describe('noteboxStorage', () => {
       `${baseUri}/General/Inbox.md`,
       '# Inbox\n\n- [[Inbox/team-ideas|team-ideas]]\n',
       {encoding: 'utf8', mimeType: 'text/markdown'},
+    );
+  });
+
+  test('pickNextInboxMarkdownFileName picks base then increments from -2 onward', () => {
+    expect(pickNextInboxMarkdownFileName('team-ideas', new Set())).toBe('team-ideas.md');
+    expect(
+      pickNextInboxMarkdownFileName(
+        'team-ideas',
+        new Set(['team-ideas.md', 'team-ideas-2.md']),
+      ),
+    ).toBe('team-ideas-3.md');
+  });
+
+  test('createNote uses occupied names to avoid known collisions', async () => {
+    existsMock
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValue(true);
+    listFilesMock.mockResolvedValueOnce([
+      {
+        lastModified: 1,
+        name: 'team-ideas.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/team-ideas.md`,
+      },
+      {
+        lastModified: 2,
+        name: 'team-ideas-2.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/team-ideas-2.md`,
+      },
+      {
+        lastModified: 3,
+        name: 'team-ideas-3.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/team-ideas-3.md`,
+      },
+    ] as never);
+
+    await expect(
+      createNote(
+        baseUri,
+        ' Team Ideas! ',
+        'first line',
+        new Set(['team-ideas.md', 'team-ideas-2.md']),
+      ),
+    ).resolves.toMatchObject({
+      name: 'team-ideas-3.md',
+      uri: `${baseUri}/Inbox/team-ideas-3.md`,
+    });
+
+    expect(writeFileMock).toHaveBeenCalledWith(
+      `${baseUri}/Inbox/team-ideas-3.md`,
+      'first line\n',
+      {
+        encoding: 'utf8',
+        mimeType: 'text/markdown',
+      },
+    );
+  });
+
+  test('createNote refreshes occupied names from disk when projection is stale', async () => {
+    existsMock
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValue(true);
+    listFilesMock.mockResolvedValueOnce([
+      {
+        lastModified: 2,
+        name: 'team-ideas.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/team-ideas.md`,
+      },
+      {
+        lastModified: 1,
+        name: 'team-ideas-2.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/team-ideas-2.md`,
+      },
+    ] as never);
+    listFilesMock.mockResolvedValueOnce([
+      {
+        lastModified: 3,
+        name: 'team-ideas-3.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/team-ideas-3.md`,
+      },
+      {
+        lastModified: 2,
+        name: 'team-ideas.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/team-ideas.md`,
+      },
+      {
+        lastModified: 1,
+        name: 'team-ideas-2.md',
+        type: 'file',
+        uri: `${baseUri}/Inbox/team-ideas-2.md`,
+      },
+    ] as never);
+
+    await expect(
+      createNote(baseUri, ' Team Ideas! ', 'first line', new Set()),
+    ).resolves.toMatchObject({
+      name: 'team-ideas-3.md',
+      uri: `${baseUri}/Inbox/team-ideas-3.md`,
+    });
+
+    expect(existsMock).toHaveBeenCalledWith(`${baseUri}/Inbox/team-ideas.md`);
+    expect(writeFileMock).toHaveBeenCalledWith(
+      `${baseUri}/Inbox/team-ideas-3.md`,
+      'first line\n',
+      {
+        encoding: 'utf8',
+        mimeType: 'text/markdown',
+      },
     );
   });
 

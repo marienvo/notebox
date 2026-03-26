@@ -107,6 +107,21 @@ function sanitizeFileName(rawName: string): string {
   return normalized || `note-${Date.now()}`;
 }
 
+export function pickNextInboxMarkdownFileName(
+  baseStem: string,
+  occupiedMarkdownNames: ReadonlySet<string>,
+): string {
+  let candidate = `${baseStem}${MARKDOWN_EXTENSION}`;
+  let nextSuffix = 2;
+
+  while (occupiedMarkdownNames.has(candidate)) {
+    candidate = `${baseStem}-${nextSuffix}${MARKDOWN_EXTENSION}`;
+    nextSuffix += 1;
+  }
+
+  return candidate;
+}
+
 function stemFromMarkdownFileName(fileName: string): string {
   return fileName.endsWith(MARKDOWN_EXTENSION)
     ? fileName.slice(0, -MARKDOWN_EXTENSION.length)
@@ -454,6 +469,7 @@ export async function createNote(
   baseUri: string,
   title: string,
   content: string,
+  occupiedInboxMarkdownNames: ReadonlySet<string> = new Set(),
 ): Promise<NoteSummary> {
   if (isDevMockVaultBaseUri(baseUri)) {
     const devStorage = getDevStorage();
@@ -467,8 +483,17 @@ export async function createNote(
     await mkdir(inboxDirectoryUri);
   }
 
-  const fileName = `${sanitizeFileName(title)}${MARKDOWN_EXTENSION}`;
-  const noteUri = `${inboxDirectoryUri}/${fileName}`;
+  const baseStem = sanitizeFileName(title);
+  let fileName = pickNextInboxMarkdownFileName(baseStem, occupiedInboxMarkdownNames);
+  let noteUri = `${inboxDirectoryUri}/${fileName}`;
+
+  if (await exists(noteUri)) {
+    const inboxRows = await listMarkdownFilesInDirectory(inboxDirectoryUri);
+    const occupiedFromDisk = new Set(inboxRows.map(row => row.name));
+    fileName = pickNextInboxMarkdownFileName(baseStem, occupiedFromDisk);
+    noteUri = `${inboxDirectoryUri}/${fileName}`;
+  }
+
   const trimmedContent = content.trim();
   const noteBody = trimmedContent ? `${trimmedContent}\n` : '';
 

@@ -102,14 +102,20 @@ export function NotesProvider({children}: NotesProviderProps) {
         throw new Error('No notes directory selected.');
       }
 
-      const createdNote = await createNote(baseUri, title, content);
+      const occupiedInboxMarkdownNames = new Set(notes.map(note => note.name));
+      const createdNote = await createNote(
+        baseUri,
+        title,
+        content,
+        occupiedInboxMarkdownNames,
+      );
       setNotes(previousNotes => mergeInboxNoteOptimistic(previousNotes, createdNote));
       InteractionManager.runAfterInteractions(() => {
         refresh({silent: true}).catch(() => undefined);
       });
       return createdNote;
     },
-    [baseUri, refresh],
+    [baseUri, notes, refresh],
   );
 
   const read = useCallback(async (noteUri: string): Promise<NoteDetail> => {
