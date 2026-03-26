@@ -57,12 +57,22 @@ jest.mock('../src/core/observability/appBreadcrumb', () => ({
 }));
 
 let capturedVaultInitialSession: VaultInitialSessionShape | null = null;
+const mockVaultContextValue = {
+  baseUri: null,
+  consumeInboxPrefetch: () => null,
+  isLoading: false,
+  refreshSession: jest.fn(),
+  setSessionUri: jest.fn(),
+  settings: null,
+  setSettings: jest.fn(),
+};
 
 jest.mock('../src/core/vault/VaultContext', () => ({
   VaultProvider: jest.fn(({children, initialSession}) => {
     capturedVaultInitialSession = initialSession as any;
     return <>{children}</>;
   }),
+  useVaultContext: jest.fn(() => mockVaultContextValue),
 }));
 
 jest.mock('../src/navigation/RootNavigator', () => ({

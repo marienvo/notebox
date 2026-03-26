@@ -8,6 +8,7 @@ Keep architecture intentionally small and explicit:
 - `RootStack` gates onboarding (`Setup`) vs. app shell (`MainTabs`).
 - `MainTabs` hosts five feature stacks: Inbox, Podcasts, Home, Vault, Settings.
 - `VaultProvider` stores selected SAF URI and current settings for all features.
+- `NotesProvider` stores shared Inbox note list state for Inbox and Vault.
 - `core/storage/noteboxStorage.ts` owns all SAF note and settings operations.
 
 This keeps business logic near features while keeping device/storage logic centralized.
@@ -39,7 +40,8 @@ InboxScreen
   -> create .md note through core/storage
   -> create note in selected directory's /Inbox folder
   -> auto-create /Inbox when missing
-  -> note appears in Vault (Inbox folder view) on refresh
+  -> note appears in Vault immediately through shared notes state
+  -> background reconcile refreshes from SAF and re-syncs generated index
 ```
 
 ```text
@@ -78,7 +80,7 @@ src/
 │   │   ├── appStorage.ts
 │   │   ├── keys.ts
 │   │   └── noteboxStorage.ts
-│   └── vault/VaultContext.tsx
+│   └── vault/{VaultContext,NotesContext}.tsx
 ├── features/
 │   ├── setup/screens/SetupScreen.tsx
 │   ├── home/screens/HomeScreen.tsx
@@ -114,6 +116,7 @@ This matches your requirement: after setup, app settings/state live inside the s
 - The canonical source for which notes exist is always the **current directory listing** of `Inbox/` (markdown files only, same rules as the Vault Inbox list: `.md` only, sync-conflict file names excluded).
 - On each successful refresh of the Vault note list (including pull-to-refresh), after creating a new Inbox note, and whenever the app triggers the same refresh path after saving note content, the app **overwrites** `General/Inbox.md` with a bullet list of wiki-style links (`[[Inbox/<stem>|<stem>]]`, no `.md` in the link path or label).
 - Any manual edits to `General/Inbox.md` are **lost** the next time the app regenerates the file.
+- Mutation sync behavior for create/edit/delete is defined in [`specs/architecture/vault-notes-optimistic-sync.md`](vault-notes-optimistic-sync.md).
 
 ## Podcast file conventions
 

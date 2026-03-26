@@ -14,6 +14,7 @@ import {MiniPlayer} from '../features/podcasts/components/MiniPlayer';
 import {PlayerProvider} from '../features/podcasts/context/PlayerContext';
 import {PodcastsScreen} from '../features/podcasts/screens/PodcastsScreen';
 import {SettingsScreen} from '../features/settings/screens/SettingsScreen';
+import {AddNoteScreen} from '../features/vault/screens/AddNoteScreen';
 import {NoteDetailScreen} from '../features/vault/screens/NoteDetailScreen';
 import {VaultScreen} from '../features/vault/screens/VaultScreen';
 import {
@@ -31,17 +32,14 @@ const PodcastsStack = createStackNavigator<PodcastsStackParamList>();
 const HomeStack = createStackNavigator<HomeStackParamList>();
 const VaultStack = createStackNavigator<VaultStackParamList>();
 const SettingsStack = createStackNavigator<SettingsStackParamList>();
+const questionMarkTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
+  <MaterialIcons color={color} name="question-mark" size={size} />
+);
 const inboxTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
   <MaterialIcons color={color} name="move-to-inbox" size={size} />
 );
 const podcastsTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
   <MaterialIcons color={color} name="headphones" size={size} />
-);
-const homeTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
-  <MaterialIcons color={color} name="home" size={size} />
-);
-const vaultTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
-  <MaterialIcons color={color} name="library-books" size={size} />
 );
 const settingsTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
   <MaterialIcons color={color} name="settings" size={size} />
@@ -114,9 +112,20 @@ function HomeStackScreen() {
 
 function VaultStackScreen() {
   return (
-    <VaultStack.Navigator screenOptions={{headerShown: false}}>
+    <VaultStack.Navigator
+      screenOptions={{
+        headerShown: false,
+        headerStyle: styles.tabHeader,
+        headerTintColor: '#ffffff',
+        headerTitleStyle: styles.tabHeaderTitle,
+      }}>
       <VaultStack.Screen component={VaultScreen} name="Vault" />
-      <VaultStack.Screen component={NoteDetailScreen} name="NoteDetail" />
+      <VaultStack.Screen component={AddNoteScreen} name="AddNote" options={{headerShown: false}} />
+      <VaultStack.Screen
+        component={NoteDetailScreen}
+        name="NoteDetail"
+        options={{headerShown: false}}
+      />
     </VaultStack.Navigator>
   );
 }
@@ -133,8 +142,12 @@ export function MainTabNavigator() {
   return (
     <PlayerProvider>
       <Tabs.Navigator
-        initialRouteName="HomeTab"
+        initialRouteName="VaultTab"
         screenOptions={{
+          headerShown: true,
+          headerStyle: styles.tabHeader,
+          headerTintColor: '#ffffff',
+          headerTitleStyle: styles.tabHeaderTitle,
           tabBarActiveTintColor: '#ffffff',
           tabBarInactiveTintColor: 'rgba(255,255,255,0.55)',
           tabBarLabelStyle: styles.tabBarLabel,
@@ -142,15 +155,6 @@ export function MainTabNavigator() {
           tabBarStyle: styles.tabBar,
         }}
         tabBar={renderTabBar}>
-        <Tabs.Screen
-          component={InboxStackScreen}
-          name="InboxTab"
-          options={{
-            tabBarButton,
-            tabBarIcon: inboxTabIcon,
-            title: 'Inbox',
-          }}
-        />
         <Tabs.Screen
           component={PodcastsStackScreen}
           name="PodcastsTab"
@@ -161,12 +165,12 @@ export function MainTabNavigator() {
           }}
         />
         <Tabs.Screen
-          component={HomeStackScreen}
-          name="HomeTab"
+          component={InboxStackScreen}
+          name="InboxTab"
           options={{
             tabBarButton,
-            tabBarIcon: homeTabIcon,
-            title: 'Home',
+            tabBarIcon: questionMarkTabIcon,
+            title: 'Slot 1',
           }}
         />
         <Tabs.Screen
@@ -174,8 +178,17 @@ export function MainTabNavigator() {
           name="VaultTab"
           options={{
             tabBarButton,
-            tabBarIcon: vaultTabIcon,
-            title: 'Vault',
+            tabBarIcon: inboxTabIcon,
+            title: 'Inbox',
+          }}
+        />
+        <Tabs.Screen
+          component={HomeStackScreen}
+          name="HomeTab"
+          options={{
+            tabBarButton,
+            tabBarIcon: questionMarkTabIcon,
+            title: 'Slot 2',
           }}
         />
         <Tabs.Screen
@@ -196,6 +209,13 @@ const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: '#1d1d1d',
     borderTopColor: '#2d2d2d',
+  },
+  tabHeader: {
+    backgroundColor: '#1d1d1d',
+  },
+  tabHeaderTitle: {
+    color: '#ffffff',
+    fontWeight: '600',
   },
   tabBarLabel: {
     fontSize: 11,

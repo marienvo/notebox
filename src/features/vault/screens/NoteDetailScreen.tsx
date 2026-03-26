@@ -1,61 +1,176 @@
+import {useFocusEffect} from '@react-navigation/native';
+import type {StackHeaderRightProps} from '@react-navigation/stack';
 import {StackScreenProps} from '@react-navigation/stack';
-import {useEffect, useState} from 'react';
+import {type ReactNode, useCallback, useEffect, useRef, useState} from 'react';
 import {Box, ScrollView, Spinner, Text, useColorMode} from '@gluestack-ui/themed';
-import {StyleSheet} from 'react-native';
+import {Pressable, StyleSheet} from 'react-native';
 import Markdown from 'react-native-markdown-display';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 import {VaultStackParamList} from '../../../navigation/types';
 import {useNotes} from '../hooks/useNotes';
 
 type NoteDetailScreenProps = StackScreenProps<VaultStackParamList, 'NoteDetail'>;
 
-export function NoteDetailScreen({route}: NoteDetailScreenProps) {
+type NoteDetailEditHeaderButtonProps = {
+  onPress: () => void;
+};
+
+function NoteDetailEditHeaderButton({onPress}: NoteDetailEditHeaderButtonProps) {
+  return (
+    <Pressable
+      accessibilityLabel="Edit note"
+      accessibilityRole="button"
+      hitSlop={{bottom: 8, left: 8, right: 8, top: 8}}
+      onPress={onPress}
+      style={styles.headerEditButton}>
+      <MaterialIcons color="#ffffff" name="edit-square" size={22} />
+    </Pressable>
+  );
+}
+
+function createNoteDetailHeaderRight(
+  navigation: NoteDetailScreenProps['navigation'],
+  noteTitle: string,
+  noteUri: string,
+): (props: StackHeaderRightProps) => ReactNode {
+  return () => (
+    <NoteDetailEditHeaderButton
+      onPress={() =>
+        navigation.navigate('AddNote', {
+          noteTitle,
+          noteUri,
+        })
+      }
+    />
+  );
+}
+
+export function NoteDetailScreen({navigation, route}: NoteDetailScreenProps) {
   const {read} = useNotes();
   const colorMode = useColorMode();
   const [content, setContent] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const hasLoadedNoteOnceRef = useRef(false);
   const markdownTextColor = colorMode === 'dark' ? '#f5f5f5' : '#212121';
   const markdownMutedColor = colorMode === 'dark' ? '#cfcfcf' : '#616161';
 
   useEffect(() => {
-    let isActive = true;
+    const tabNavigation = navigation.getParent();
+    if (!tabNavigation) {
+      return;
+    }
 
-    const loadNote = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const note = await read(route.params.noteUri);
-
-        if (!isActive) {
-          return;
-        }
-
-        setContent(note.content);
-      } catch (loadError) {
-        if (!isActive) {
-          return;
-        }
-
-        const fallbackMessage = 'Could not load this note.';
-        setError(loadError instanceof Error ? loadError.message : fallbackMessage);
-      } finally {
-        if (isActive) {
-          setIsLoading(false);
-        }
-      }
+    const showVaultTabHeader = () => {
+      tabNavigation.setOptions({
+        headerShown: true,
+        headerLeft: undefined,
+        headerTitle: 'Inbox',
+      });
     };
 
-    loadNote().catch(() => undefined);
+    const hideVaultTabHeader = () => {
+      tabNavigation.setOptions({
+        headerShown: false,
+      });
+    };
+
+    const showNoteStackHeader = () => {
+      navigation.setOptions({
+        headerRight: createNoteDetailHeaderRight(
+          navigation,
+          route.params.noteTitle,
+          route.params.noteUri,
+        ),
+        headerShown: true,
+        title: route.params.noteTitle,
+      });
+    };
+
+    const hideNoteStackHeader = () => {
+      navigation.setOptions({
+        headerShown: false,
+      });
+    };
+
+    const unsubscribeTransitionEnd = navigation.addListener('transitionEnd', event => {
+      if (event.data.closing) {
+        return;
+      }
+      hideVaultTabHeader();
+      showNoteStackHeader();
+    });
+
+    const unsubscribeTransitionStart = navigation.addListener('transitionStart', event => {
+      if (!event.data.closing) {
+        return;
+      }
+      hideNoteStackHeader();
+      showVaultTabHeader();
+    });
+
+    const unsubscribeBeforeRemove = navigation.addListener('beforeRemove', () => {
+      hideNoteStackHeader();
+      showVaultTabHeader();
+    });
 
     return () => {
-      isActive = false;
+      unsubscribeTransitionEnd();
+      unsubscribeTransitionStart();
+      unsubscribeBeforeRemove();
+      hideNoteStackHeader();
+      showVaultTabHeader();
     };
-  }, [read, route.params.noteUri]);
+  }, [navigation, route.params.noteTitle, route.params.noteUri]);
+
+  useEffect(() => {
+    hasLoadedNoteOnceRef.current = false;
+  }, [route.params.noteUri]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      const silentReload = hasLoadedNoteOnceRef.current;
+
+      const loadNote = async () => {
+        if (!silentReload) {
+          setIsLoading(true);
+        }
+        setError(null);
+        try {
+          const note = await read(route.params.noteUri);
+
+          if (!isActive) {
+            return;
+          }
+
+          setContent(note.content);
+          hasLoadedNoteOnceRef.current = true;
+        } catch (loadError) {
+          if (!isActive) {
+            return;
+          }
+
+          const fallbackMessage = 'Could not load this note.';
+          setError(loadError instanceof Error ? loadError.message : fallbackMessage);
+        } finally {
+          if (isActive && !silentReload) {
+            setIsLoading(false);
+          }
+        }
+      };
+
+      loadNote().catch(() => undefined);
+
+      return () => {
+        isActive = false;
+      };
+    }, [read, route.params.noteUri]),
+  );
 
   return (
     <Box style={styles.container}>
-      <Text style={styles.title}>{route.params.noteTitle}</Text>
       {isLoading ? <Spinner style={styles.spinner} /> : null}
       {error ? <Text style={styles.status}>{error}</Text> : null}
       {!isLoading && !error ? (
@@ -93,10 +208,11 @@ const styles = StyleSheet.create({
     marginVertical: 10,
     textAlign: 'center',
   },
-  title: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 6,
-    textAlign: 'center',
+  headerEditButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+    minHeight: 48,
+    minWidth: 48,
   },
 });

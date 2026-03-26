@@ -8,6 +8,7 @@ import {
   RootMarkdownFile,
 } from '../types';
 import {NOTES_DIRECTORY_URI_KEY} from '../core/storage/keys';
+import {pickNextInboxMarkdownFileName} from '../core/storage/noteboxStorage';
 import {
   DEV_MOCK_VAULT_URI,
   MOCK_NOTES,
@@ -372,13 +373,14 @@ export async function createNote(
 
   const index = await readNotesIndex();
   const baseName = sanitizeFileName(title);
-  let fileName = inInboxPath(`${baseName}${MARKDOWN_EXTENSION}`);
-  let nextSuffix = 2;
-
-  while (Object.prototype.hasOwnProperty.call(index, fileName)) {
-    fileName = inInboxPath(`${baseName}-${nextSuffix}${MARKDOWN_EXTENSION}`);
-    nextSuffix += 1;
-  }
+  const occupiedBasenames = new Set(
+    Object.keys(index)
+      .filter(name => name.startsWith(`${INBOX_DIRECTORY_NAME}/`))
+      .map(name => name.slice(INBOX_DIRECTORY_NAME.length + 1)),
+  );
+  const fileName = inInboxPath(
+    pickNextInboxMarkdownFileName(baseName, occupiedBasenames),
+  );
 
   const lastModified = Date.now();
   await AsyncStorage.setItem(devNoteKey(fileName), normalizeNoteContent(content));
@@ -440,6 +442,27 @@ export async function writeNoteContent(
   await AsyncStorage.setItem(devNoteKey(fileName), `${content}\n`);
   index[fileName] = Date.now();
   await writeNotesIndex(index);
+}
+
+export async function deleteInboxNotes(
+  baseUri: string,
+  noteUris: readonly string[],
+): Promise<void> {
+  assertMockBaseUri(baseUri);
+  await ensureSeeded();
+
+  const index = await readNotesIndex();
+  for (const noteUri of noteUris) {
+    const fileName = noteNameFromUri(noteUri);
+    if (!fileName.startsWith(`${INBOX_DIRECTORY_NAME}/`)) {
+      throw new Error('Only Inbox notes can be deleted.');
+    }
+    delete index[fileName];
+    await AsyncStorage.removeItem(devNoteKey(fileName));
+  }
+
+  await writeNotesIndex(index);
+  await refreshInboxMarkdownIndex(baseUri);
 }
 
 export async function readPlaylist(baseUri: string): Promise<PlaylistEntry | null> {

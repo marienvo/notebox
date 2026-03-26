@@ -3,6 +3,7 @@ import {
   listFiles,
   mkdir,
   readFile,
+  unlink,
   writeFile,
 } from 'react-native-saf-x';
 
@@ -105,6 +106,21 @@ function sanitizeFileName(rawName: string): string {
     .replace(/^[-_]+|[-_]+$/g, '');
 
   return normalized || `note-${Date.now()}`;
+}
+
+export function pickNextInboxMarkdownFileName(
+  baseStem: string,
+  occupiedMarkdownNames: ReadonlySet<string>,
+): string {
+  let candidate = `${baseStem}${MARKDOWN_EXTENSION}`;
+  let nextSuffix = 2;
+
+  while (occupiedMarkdownNames.has(candidate)) {
+    candidate = `${baseStem}-${nextSuffix}${MARKDOWN_EXTENSION}`;
+    nextSuffix += 1;
+  }
+
+  return candidate;
 }
 
 function stemFromMarkdownFileName(fileName: string): string {
@@ -355,7 +371,19 @@ export function isNoteUriInInbox(noteUri: string, baseUri: string): boolean {
   const normalizedBaseUri = normalizeBaseUri(baseUri);
   const normalizedNoteUri = normalizeNoteUri(noteUri);
   const inboxDirectoryUri = getInboxDirectoryUri(normalizedBaseUri);
-  return normalizedNoteUri.startsWith(`${inboxDirectoryUri}/`);
+  if (normalizedNoteUri.startsWith(`${inboxDirectoryUri}/`)) {
+    return true;
+  }
+
+  // Some SAF providers return canonical document URIs (`.../document/<docId>`) where the
+  // Inbox path is embedded in `<docId>` instead of a plain `<base>/Inbox/<file>` prefix.
+  // Decode and check for an Inbox segment to avoid false negatives on valid Inbox notes.
+  try {
+    const decoded = decodeURIComponent(normalizedNoteUri);
+    return /(?:^|[/:])Inbox\//.test(decoded);
+  } catch {
+    return false;
+  }
 }
 
 async function writeInboxMarkdownIndexFromMarkdownFileNames(
@@ -454,6 +482,7 @@ export async function createNote(
   baseUri: string,
   title: string,
   content: string,
+  occupiedInboxMarkdownNames: ReadonlySet<string> = new Set(),
 ): Promise<NoteSummary> {
   if (isDevMockVaultBaseUri(baseUri)) {
     const devStorage = getDevStorage();
@@ -467,8 +496,17 @@ export async function createNote(
     await mkdir(inboxDirectoryUri);
   }
 
-  const fileName = `${sanitizeFileName(title)}${MARKDOWN_EXTENSION}`;
-  const noteUri = `${inboxDirectoryUri}/${fileName}`;
+  const baseStem = sanitizeFileName(title);
+  let fileName = pickNextInboxMarkdownFileName(baseStem, occupiedInboxMarkdownNames);
+  let noteUri = `${inboxDirectoryUri}/${fileName}`;
+
+  if (await exists(noteUri)) {
+    const inboxRows = await listMarkdownFilesInDirectory(inboxDirectoryUri);
+    const occupiedFromDisk = new Set(inboxRows.map(row => row.name));
+    fileName = pickNextInboxMarkdownFileName(baseStem, occupiedFromDisk);
+    noteUri = `${inboxDirectoryUri}/${fileName}`;
+  }
+
   const trimmedContent = content.trim();
   const noteBody = trimmedContent ? `${trimmedContent}\n` : '';
 
@@ -503,6 +541,28 @@ export async function writeNoteContent(
     encoding: 'utf8',
     mimeType: 'text/markdown',
   });
+}
+
+export async function deleteInboxNotes(
+  baseUri: string,
+  noteUris: readonly string[],
+): Promise<void> {
+  if (isDevMockVaultBaseUri(baseUri)) {
+    const devStorage = getDevStorage();
+    await devStorage.deleteInboxNotes(baseUri, noteUris);
+    return;
+  }
+
+  const normalizedBaseUri = normalizeBaseUri(baseUri);
+  for (const noteUri of noteUris) {
+    const normalizedNoteUri = normalizeNoteUri(noteUri);
+    if (!isNoteUriInInbox(normalizedNoteUri, normalizedBaseUri)) {
+      throw new Error('Could not verify that the selected note belongs to Inbox.');
+    }
+    await unlink(normalizedNoteUri);
+  }
+
+  await refreshInboxMarkdownIndex(normalizedBaseUri);
 }
 
 export async function readPlaylist(baseUri: string): Promise<PlaylistEntry | null> {
