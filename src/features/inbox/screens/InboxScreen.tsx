@@ -7,7 +7,7 @@ import {
   InputField,
   Text,
 } from '@gluestack-ui/themed';
-import {StyleSheet} from 'react-native';
+import {Keyboard, StyleSheet} from 'react-native';
 
 import {useNotes} from '../../vault/hooks/useNotes';
 
@@ -33,6 +33,7 @@ export function InboxScreen() {
     }
 
     setStatusText(null);
+    Keyboard.dismiss();
     setIsSaving(true);
     try {
       await create(trimmedTitle, trimmedContent);
@@ -52,6 +53,7 @@ export function InboxScreen() {
       <Text style={styles.description}>Capture an idea and store it as markdown.</Text>
       <Input style={styles.input}>
         <InputField
+          editable={!isSaving}
           onChangeText={setTitle}
           placeholder="Title"
           value={title}
@@ -59,6 +61,7 @@ export function InboxScreen() {
       </Input>
       <Input style={[styles.input, styles.textArea]}>
         <InputField
+          editable={!isSaving}
           multiline
           onChangeText={setContent}
           placeholder="Write your idea..."

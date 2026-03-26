@@ -30,6 +30,7 @@ import {runPodcastPhase1} from './src/features/podcasts/services/podcastPhase1';
 import {NoteSummary, NoteboxSettings} from './src/types';
 import {appBreadcrumb} from './src/core/observability/appBreadcrumb';
 import {elapsedMsSinceJsBundleEval} from './src/core/observability/startupTiming';
+import {NotesProvider} from './src/core/vault/NotesContext';
 
 type InitialRoute = keyof RootStackParamList;
 
@@ -233,7 +234,9 @@ function App() {
             </View>
           ) : (
             <VaultProvider initialSession={initialSession}>
-              <RootNavigator initialRouteName={initialRoute} />
+              <NotesProvider>
+                <RootNavigator initialRouteName={initialRoute} />
+              </NotesProvider>
             </VaultProvider>
           )}
         </SafeAreaProvider>
