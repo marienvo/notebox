@@ -49,12 +49,6 @@ function isPoppingFromAddNoteToVault(stackNavigation: AddNoteNavigation): boolea
   return state.routes[idx - 1]?.name === 'Vault';
 }
 
-/** After AddNote unmounts, the stack focus is already the screen we popped to. */
-function isVaultStackFocusedOnVaultList(stackNavigation: AddNoteNavigation): boolean {
-  const state = stackNavigation.getState();
-  return state.routes[state.index]?.name === 'Vault';
-}
-
 function leaveComposeScreen(navigation: AddNoteNavigation) {
   if (isVaultComposeStack(navigation)) {
     navigation.goBack();
@@ -200,9 +194,6 @@ export function AddNoteScreen({navigation, route}: AddNoteScreenProps) {
       unsubscribeTransitionStart();
       unsubscribeBeforeRemove();
       hideComposeStackHeader();
-      if (isVaultStackFocusedOnVaultList(stackNavigation)) {
-        showVaultTabHeader();
-      }
     };
   }, [isEdit, stackNavigation]);
 

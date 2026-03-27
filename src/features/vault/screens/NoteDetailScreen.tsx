@@ -56,6 +56,25 @@ export function NoteDetailScreen({navigation, route}: NoteDetailScreenProps) {
   const markdownTextColor = colorMode === 'dark' ? '#f5f5f5' : '#212121';
   const markdownMutedColor = colorMode === 'dark' ? '#cfcfcf' : '#616161';
 
+  const applyFocusedNoteHeaders = useCallback(() => {
+    const tabNavigation = navigation.getParent();
+    if (!tabNavigation) {
+      return;
+    }
+    tabNavigation.setOptions({
+      headerShown: false,
+    });
+    navigation.setOptions({
+      headerRight: createNoteDetailHeaderRight(
+        navigation,
+        route.params.noteTitle,
+        route.params.noteUri,
+      ),
+      headerShown: true,
+      title: route.params.noteTitle,
+    });
+  }, [navigation, route.params.noteTitle, route.params.noteUri]);
+
   useEffect(() => {
     const tabNavigation = navigation.getParent();
     if (!tabNavigation) {
@@ -123,6 +142,12 @@ export function NoteDetailScreen({navigation, route}: NoteDetailScreenProps) {
       showVaultTabHeader();
     };
   }, [navigation, route.params.noteTitle, route.params.noteUri]);
+
+  useFocusEffect(
+    useCallback(() => {
+      applyFocusedNoteHeaders();
+    }, [applyFocusedNoteHeaders]),
+  );
 
   useEffect(() => {
     hasLoadedNoteOnceRef.current = false;
