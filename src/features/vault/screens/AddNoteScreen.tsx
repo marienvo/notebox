@@ -21,18 +21,26 @@ import {
   inboxMarkdownFileToComposeInput,
   parseComposeInput,
 } from '../../../core/vault/vaultComposeNote';
-import {VaultStackParamList} from '../../../navigation/types';
+import {AddNoteStackParamList, VaultStackParamList} from '../../../navigation/types';
 import {useSaveInboxMarkdownNote} from '../../inbox/hooks/useSaveInboxMarkdownNote';
 import {MINI_PLAYER_LAYOUT_HEIGHT} from '../../podcasts/components/MiniPlayer';
 import {usePlayerContext} from '../../podcasts/context/PlayerContext';
 import {useNotes} from '../hooks/useNotes';
 
-type AddNoteScreenProps = StackScreenProps<VaultStackParamList, 'AddNote'>;
+type AddNoteScreenProps =
+  | StackScreenProps<VaultStackParamList, 'AddNote'>
+  | StackScreenProps<AddNoteStackParamList, 'AddNote'>;
+
+type AddNoteNavigation = StackNavigationProp<VaultStackParamList, 'AddNote'> &
+  StackNavigationProp<AddNoteStackParamList, 'AddNote'>;
+
+/** Home stack only registers AddNote; Vault stack includes Vault and NoteDetail. */
+function isVaultComposeStack(navigation: Pick<AddNoteNavigation, 'getState'>): boolean {
+  return navigation.getState().routeNames.includes('Vault');
+}
 
 /** True when the screen under AddNote in the stack is Vault (back goes to the inbox list). */
-function isPoppingFromAddNoteToVault(
-  stackNavigation: StackNavigationProp<VaultStackParamList, 'AddNote'>,
-): boolean {
+function isPoppingFromAddNoteToVault(stackNavigation: AddNoteNavigation): boolean {
   const state = stackNavigation.getState();
   const idx = state.index;
   if (idx < 1) {
@@ -42,14 +50,21 @@ function isPoppingFromAddNoteToVault(
 }
 
 /** After AddNote unmounts, the stack focus is already the screen we popped to. */
-function isVaultStackFocusedOnVaultList(
-  stackNavigation: StackNavigationProp<VaultStackParamList, 'AddNote'>,
-): boolean {
+function isVaultStackFocusedOnVaultList(stackNavigation: AddNoteNavigation): boolean {
   const state = stackNavigation.getState();
   return state.routes[state.index]?.name === 'Vault';
 }
 
+function leaveComposeScreen(navigation: AddNoteNavigation) {
+  if (isVaultComposeStack(navigation)) {
+    navigation.goBack();
+    return;
+  }
+  navigation.getParent()?.navigate('VaultTab');
+}
+
 export function AddNoteScreen({navigation, route}: AddNoteScreenProps) {
+  const stackNavigation = navigation as AddNoteNavigation;
   const editParams = route.params;
   const isEdit = Boolean(editParams?.noteUri);
   const [composeInput, setComposeInput] = useState('');
@@ -96,9 +111,33 @@ export function AddNoteScreen({navigation, route}: AddNoteScreenProps) {
   }, [editParams?.noteUri, read, setStatusText]);
 
   useEffect(() => {
-    const tabNavigation = navigation.getParent();
+    const tabNavigation = stackNavigation.getParent();
     if (!tabNavigation) {
       return;
+    }
+
+    if (!isVaultComposeStack(stackNavigation)) {
+      stackNavigation.setOptions({headerShown: false});
+
+      const showAddNoteTabHeader = () => {
+        tabNavigation.setOptions({
+          headerBackVisible: false,
+          headerLeft: () => null,
+          headerShown: true,
+          headerTitle: isEdit ? 'Edit note' : 'Note',
+        });
+      };
+
+      showAddNoteTabHeader();
+
+      return () => {
+        tabNavigation.setOptions({
+          headerBackVisible: undefined,
+          headerLeft: undefined,
+          headerShown: true,
+          headerTitle: 'Note',
+        });
+      };
     }
 
     const showVaultTabHeader = () => {
@@ -115,19 +154,19 @@ export function AddNoteScreen({navigation, route}: AddNoteScreenProps) {
     };
 
     const showComposeStackHeader = () => {
-      navigation.setOptions({
+      stackNavigation.setOptions({
         headerShown: true,
         title: isEdit ? 'Edit note' : 'New note',
       });
     };
 
     const hideComposeStackHeader = () => {
-      navigation.setOptions({
+      stackNavigation.setOptions({
         headerShown: false,
       });
     };
 
-    const unsubscribeTransitionEnd = navigation.addListener('transitionEnd', event => {
+    const unsubscribeTransitionEnd = stackNavigation.addListener('transitionEnd', event => {
       if (event.data.closing) {
         return;
       }
@@ -135,21 +174,21 @@ export function AddNoteScreen({navigation, route}: AddNoteScreenProps) {
       showComposeStackHeader();
     });
 
-    const unsubscribeTransitionStart = navigation.addListener('transitionStart', event => {
+    const unsubscribeTransitionStart = stackNavigation.addListener('transitionStart', event => {
       if (!event.data.closing) {
         return;
       }
       hideComposeStackHeader();
-      if (isPoppingFromAddNoteToVault(navigation)) {
+      if (isPoppingFromAddNoteToVault(stackNavigation)) {
         showVaultTabHeader();
       } else {
         hideVaultTabHeader();
       }
     });
 
-    const unsubscribeBeforeRemove = navigation.addListener('beforeRemove', () => {
+    const unsubscribeBeforeRemove = stackNavigation.addListener('beforeRemove', () => {
       hideComposeStackHeader();
-      if (isPoppingFromAddNoteToVault(navigation)) {
+      if (isPoppingFromAddNoteToVault(stackNavigation)) {
         showVaultTabHeader();
       } else {
         hideVaultTabHeader();
@@ -161,14 +200,27 @@ export function AddNoteScreen({navigation, route}: AddNoteScreenProps) {
       unsubscribeTransitionStart();
       unsubscribeBeforeRemove();
       hideComposeStackHeader();
-      if (isVaultStackFocusedOnVaultList(navigation)) {
+      if (isVaultStackFocusedOnVaultList(stackNavigation)) {
         showVaultTabHeader();
       }
     };
-  }, [isEdit, navigation]);
+  }, [isEdit, stackNavigation]);
 
   useFocusEffect(
     useCallback(() => {
+      if (!isVaultComposeStack(stackNavigation)) {
+        const tabNavigation = stackNavigation.getParent();
+        if (tabNavigation) {
+          stackNavigation.setOptions({headerShown: false});
+          tabNavigation.setOptions({
+            headerBackVisible: false,
+            headerLeft: () => null,
+            headerShown: true,
+            headerTitle: isEdit ? 'Edit note' : 'Note',
+          });
+        }
+      }
+
       if (isLoadingEdit) {
         return undefined;
       }
@@ -199,7 +251,7 @@ export function AddNoteScreen({navigation, route}: AddNoteScreenProps) {
         cancelled = true;
         task.cancel();
       };
-    }, [isLoadingEdit]),
+    }, [isEdit, isLoadingEdit, stackNavigation]),
   );
 
   const handleSave = async () => {
@@ -214,7 +266,7 @@ export function AddNoteScreen({navigation, route}: AddNoteScreenProps) {
     const didSave = await save(titleLine, markdownBody, {
       noteUri: editParams?.noteUri,
       onSaved: () => {
-        navigation.goBack();
+        leaveComposeScreen(stackNavigation);
       },
     });
     if (!didSave) {
@@ -228,7 +280,7 @@ export function AddNoteScreen({navigation, route}: AddNoteScreenProps) {
 
   const onPressCancel = () => {
     Keyboard.dismiss();
-    navigation.goBack();
+    leaveComposeScreen(stackNavigation);
   };
 
   return (

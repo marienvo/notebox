@@ -235,7 +235,7 @@ export function VaultScreen({navigation}: VaultScreenProps) {
         ListEmptyComponent={
           !isLoading ? (
             <Text style={styles.status}>
-              No markdown notes found in Inbox. Add one from the Inbox tab.
+              No markdown notes found in Inbox. Add one with + or the Note tab.
             </Text>
           ) : null
         }
