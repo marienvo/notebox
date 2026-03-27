@@ -267,11 +267,10 @@ export function VaultScreen({navigation}: VaultScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 0,
   },
   listContent: {
     paddingBottom: 20,
+    paddingHorizontal: 20,
   },
   noteMeta: {
     fontSize: 12,
@@ -309,6 +308,7 @@ const styles = StyleSheet.create({
   },
   status: {
     marginVertical: 10,
+    paddingHorizontal: 20,
     textAlign: 'center',
   },
 });

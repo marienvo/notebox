@@ -2,8 +2,9 @@
  * @format
  */
 
+import type {ComponentProps} from 'react';
 import {act, create, ReactTestRenderer} from 'react-test-renderer';
-import {Image} from 'react-native';
+import {Image, Text as RNText} from 'react-native';
 
 import {useVaultContext} from '../src/core/vault/VaultContext';
 import {EpisodeRow} from '../src/features/podcasts/components/EpisodeRow';
@@ -60,7 +61,7 @@ describe('EpisodeRow', () => {
     useVaultContextMock.mockReturnValue({baseUri: 'content://notes'} as never);
   });
 
-  function renderRow(): ReactTestRenderer {
+  function renderRow(overrides: Partial<ComponentProps<typeof EpisodeRow>> = {}): ReactTestRenderer {
     return create(
       <EpisodeRow
         activeEpisodeId={null}
@@ -69,8 +70,10 @@ describe('EpisodeRow', () => {
         mutedTextColor="#666666"
         onMarkAsPlayed={jest.fn().mockResolvedValue(undefined)}
         onPlayEpisode={jest.fn().mockResolvedValue(undefined)}
+        onToggleSelect={jest.fn()}
         playbackLoading={false}
         playbackState="paused"
+        {...overrides}
       />,
     );
   }
@@ -112,5 +115,19 @@ describe('EpisodeRow', () => {
       episode.rssFeedUrl,
       expect.objectContaining({allowBackgroundFetch: true}),
     );
+  });
+
+  test('shows check icon when selected', async () => {
+    let tree: ReactTestRenderer;
+    usePodcastArtworkMock.mockReturnValue('https://example.com/artwork.png');
+
+    await act(async () => {
+      tree = renderRow({isSelected: true});
+    });
+
+    const iconTexts = tree!.root
+      .findAllByType(RNText)
+      .filter(node => node.props.children === 'check');
+    expect(iconTexts.length).toBeGreaterThanOrEqual(1);
   });
 });
