@@ -1,3 +1,4 @@
+import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import {useFocusEffect} from '@react-navigation/native';
 import type {StackNavigationProp} from '@react-navigation/stack';
 import {StackScreenProps} from '@react-navigation/stack';
@@ -22,6 +23,8 @@ import {
 } from '../../../core/vault/vaultComposeNote';
 import {VaultStackParamList} from '../../../navigation/types';
 import {useSaveInboxMarkdownNote} from '../../inbox/hooks/useSaveInboxMarkdownNote';
+import {MINI_PLAYER_LAYOUT_HEIGHT} from '../../podcasts/components/MiniPlayer';
+import {usePlayerContext} from '../../podcasts/context/PlayerContext';
 import {useNotes} from '../hooks/useNotes';
 
 type AddNoteScreenProps = StackScreenProps<VaultStackParamList, 'AddNote'>;
@@ -56,6 +59,10 @@ export function AddNoteScreen({navigation, route}: AddNoteScreenProps) {
   const {read} = useNotes();
   const colorMode = useColorMode();
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
+  const {activeEpisode} = usePlayerContext();
+  const bottomChromeKeyboardOffset =
+    tabBarHeight + (activeEpisode ? MINI_PLAYER_LAYOUT_HEIGHT : 0);
   const inputTextColor = colorMode === 'dark' ? '#f5f5f5' : '#212121';
   const placeholderColor = colorMode === 'dark' ? '#8a8a8a' : '#888888';
 
@@ -252,8 +259,10 @@ export function AddNoteScreen({navigation, route}: AddNoteScreenProps) {
             value={composeInput}
           />
           {statusText ? <Text style={styles.status}>{statusText}</Text> : null}
-          {/* Pins the action row to the keyboard; optional offset={{ closed, opened }} if a device needs a px tweak. */}
-          <KeyboardStickyView style={styles.stickyFooter}>
+          {/* Positive opened offset: footer sits above tab bar + mini player; keyboard animation is window-scoped. */}
+          <KeyboardStickyView
+            offset={{closed: 0, opened: bottomChromeKeyboardOffset}}
+            style={styles.stickyFooter}>
             <Box
               style={[
                 styles.actionBar,
