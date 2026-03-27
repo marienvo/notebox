@@ -48,6 +48,7 @@ AddNoteScreen (Vault + button or Note tab)
 VaultScreen
   -> show one folder context (hardcoded: Inbox)
   -> list markdown files in selected SAF directory's /Inbox folder
+  -> each row shows title and a relative last-modified label (not the raw file URI)
   -> open NoteDetailScreen to render markdown
 ```
 

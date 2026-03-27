@@ -4,6 +4,7 @@ import {StyleSheet, View} from 'react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
+import {formatRelativeCalendarLabelFromIsoDate} from '../../../core/utils/relativeCalendarLabel';
 import {useVaultContext} from '../../../core/vault/VaultContext';
 import {PodcastEpisode} from '../../../types';
 import {PodcastArtworkImage} from './PodcastArtworkImage';
@@ -95,7 +96,7 @@ export function EpisodeRow({
         <View style={styles.episodeContent}>
           <Text style={styles.episodeTitle}>{episode.title}</Text>
           <Text style={[styles.meta, {color: mutedTextColor}]}>
-            {episode.seriesName} - {episode.date}
+            {episode.seriesName} - {formatRelativeCalendarLabelFromIsoDate(episode.date)}
           </Text>
           <Text style={[styles.meta, {color: mutedTextColor}]}>
             {isPlaying ? 'Playing' : isActive ? 'Paused' : 'Tap to play'}

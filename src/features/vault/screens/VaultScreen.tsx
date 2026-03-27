@@ -11,6 +11,7 @@ import {
 import {FlatList, RefreshControl, StyleSheet, TouchableOpacity, View} from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
+import {formatRelativeCalendarLabel} from '../../../core/utils/relativeCalendarLabel';
 import {getNoteTitle} from '../../../core/storage/noteboxStorage';
 import {getInboxTileBackgroundColor} from '../utils/inboxTileColor';
 import {VaultStackParamList} from '../../../navigation/types';
@@ -246,7 +247,7 @@ export function VaultScreen({navigation}: VaultScreenProps) {
               style={styles.noteContent}>
               <Text style={styles.noteTitle}>{getNoteTitle(item.name)}</Text>
               <Text numberOfLines={1} style={[styles.noteMeta, {color: mutedTextColor}]}>
-                {item.uri}
+                {formatRelativeCalendarLabel(item.lastModified)}
               </Text>
             </Pressable>
           </View>
