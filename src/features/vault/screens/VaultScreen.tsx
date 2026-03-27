@@ -12,6 +12,7 @@ import {FlatList, RefreshControl, StyleSheet, TouchableOpacity, View} from 'reac
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 import {getNoteTitle} from '../../../core/storage/noteboxStorage';
+import {getInboxTileBackgroundColor} from '../utils/inboxTileColor';
 import {VaultStackParamList} from '../../../navigation/types';
 import {useNotes} from '../hooks/useNotes';
 
@@ -26,7 +27,6 @@ export function VaultScreen({navigation}: VaultScreenProps) {
   const colorMode = useColorMode();
   const dividerColor = colorMode === 'dark' ? '#4f4f4f' : '#d6d6d6';
   const mutedTextColor = colorMode === 'dark' ? '#cfcfcf' : '#616161';
-  const checkboxFillColor = colorMode === 'dark' ? '#4f4f4f' : '#e2e2e2';
   const actionBarBackgroundColor = colorMode === 'dark' ? '#1f1f1f' : '#ffffff';
   const selectedCount = selectedNoteUris.size;
   const hasSelection = selectedCount > 0;
@@ -216,9 +216,12 @@ export function VaultScreen({navigation}: VaultScreenProps) {
             <Pressable
               disabled={isDeleting}
               onPress={() => toggleNoteSelection(item.uri)}
-              style={[styles.checkboxAvatar, {backgroundColor: checkboxFillColor}]}>
+              style={[
+                styles.checkboxAvatar,
+                {backgroundColor: getInboxTileBackgroundColor(item.lastModified)},
+              ]}>
               {selectedNoteUris.has(item.uri) ? (
-                <MaterialIcons color="#1d7b3b" name="check" size={20} />
+                <MaterialIcons color="#000000" name="check" size={28} />
               ) : null}
             </Pressable>
             <Pressable
