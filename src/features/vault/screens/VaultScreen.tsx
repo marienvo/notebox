@@ -8,11 +8,24 @@ import {
   Text,
   useColorMode,
 } from '@gluestack-ui/themed';
-import {FlatList, RefreshControl, StyleSheet, TouchableOpacity, View} from 'react-native';
+import {
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
-import {formatRelativeCalendarLabel} from '../../../core/utils/relativeCalendarLabel';
+import {
+  LIST_DIVIDER_DARK,
+  LIST_DIVIDER_LIGHT,
+  LIST_HORIZONTAL_INSET,
+} from '../../../core/ui/listMetrics';
 import {getNoteTitle} from '../../../core/storage/noteboxStorage';
+import {extractFirstMarkdownH1} from '../../../core/utils/extractFirstMarkdownH1';
+import {formatRelativeCalendarLabel} from '../../../core/utils/relativeCalendarLabel';
+import {useVaultContext} from '../../../core/vault/VaultContext';
 import {getInboxTileBackgroundColor} from '../utils/inboxTileColor';
 import {VaultStackParamList} from '../../../navigation/types';
 import {useNotes} from '../hooks/useNotes';
@@ -20,13 +33,14 @@ import {useNotes} from '../hooks/useNotes';
 type VaultScreenProps = StackScreenProps<VaultStackParamList, 'Vault'>;
 
 export function VaultScreen({navigation}: VaultScreenProps) {
+  const {getInboxNoteContentFromCache} = useVaultContext();
   const {deleteNotes, error, isLoading, notes, refresh} = useNotes();
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedNoteUris, setSelectedNoteUris] = useState<Set<string>>(new Set());
   const deleteInFlightRef = useRef(false);
   const colorMode = useColorMode();
-  const dividerColor = colorMode === 'dark' ? '#4f4f4f' : '#d6d6d6';
+  const dividerColor = colorMode === 'dark' ? LIST_DIVIDER_DARK : LIST_DIVIDER_LIGHT;
   const mutedTextColor = colorMode === 'dark' ? '#cfcfcf' : '#616161';
   const selectedCount = selectedNoteUris.size;
   const hasSelection = selectedCount > 0;
@@ -38,12 +52,17 @@ export function VaultScreen({navigation}: VaultScreenProps) {
 
   const openNote = useCallback(
     (noteUri: string, noteName: string) => {
+      const cached = getInboxNoteContentFromCache(noteUri);
+      const fromH1 =
+        cached !== undefined ? extractFirstMarkdownH1(cached) : null;
+      const noteTitle = fromH1 ?? getNoteTitle(noteName);
       navigation.navigate('NoteDetail', {
-        noteTitle: getNoteTitle(noteName),
+        noteFileName: noteName,
+        noteTitle,
         noteUri,
       });
     },
-    [navigation],
+    [getInboxNoteContentFromCache, navigation],
   );
 
   const renderSelectionHeaderLeft = useCallback(
@@ -228,30 +247,54 @@ export function VaultScreen({navigation}: VaultScreenProps) {
             refreshing={isLoading && notes.length > 0}
           />
         }
-        renderItem={({item}) => (
-          <View style={[styles.noteRow, {borderBottomColor: dividerColor}]}>
-            <Pressable
-              disabled={isDeleting}
-              onPress={() => toggleNoteSelection(item.uri)}
+        renderItem={({index, item}) => {
+          const cached = getInboxNoteContentFromCache(item.uri);
+          const fromH1 =
+            cached !== undefined ? extractFirstMarkdownH1(cached) : null;
+          const listTitle = fromH1 ?? getNoteTitle(item.name);
+          const isLast = index === notes.length - 1;
+
+          return (
+            <View
               style={[
-                styles.checkboxAvatar,
-                {backgroundColor: getInboxTileBackgroundColor(item.lastModified)},
+                styles.noteRowOuter,
+                {borderBottomColor: dividerColor},
+                isLast ? styles.noteRowOuterLast : null,
               ]}>
-              {selectedNoteUris.has(item.uri) ? (
-                <MaterialIcons color="#000000" name="check" size={28} />
-              ) : null}
-            </Pressable>
-            <Pressable
-              disabled={isDeleting}
-              onPress={() => openNote(item.uri, item.name)}
-              style={styles.noteContent}>
-              <Text style={styles.noteTitle}>{getNoteTitle(item.name)}</Text>
-              <Text numberOfLines={1} style={[styles.noteMeta, {color: mutedTextColor}]}>
-                {formatRelativeCalendarLabel(item.lastModified)}
-              </Text>
-            </Pressable>
-          </View>
-        )}
+              <View style={styles.noteRowInner}>
+                <Pressable
+                  disabled={isDeleting}
+                  onPress={() => toggleNoteSelection(item.uri)}
+                  style={[
+                    styles.checkboxAvatar,
+                    {
+                      backgroundColor: getInboxTileBackgroundColor(item.lastModified),
+                    },
+                  ]}>
+                  {selectedNoteUris.has(item.uri) ? (
+                    <MaterialIcons color="#000000" name="check" size={28} />
+                  ) : null}
+                </Pressable>
+                <Pressable
+                  disabled={isDeleting}
+                  onPress={() => openNote(item.uri, item.name)}
+                  style={styles.noteContent}>
+                  <Text style={styles.noteTitle}>{listTitle}</Text>
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.noteFileName, {color: mutedTextColor}]}>
+                    {item.name}
+                  </Text>
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.noteMeta, {color: mutedTextColor}]}>
+                    {formatRelativeCalendarLabel(item.lastModified)}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          );
+        }}
         ListEmptyComponent={
           !isLoading ? (
             <Text style={styles.status}>
@@ -270,19 +313,30 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 20,
-    paddingHorizontal: 20,
+    paddingHorizontal: LIST_HORIZONTAL_INSET,
   },
   noteMeta: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  noteFileName: {
     fontSize: 12,
     marginTop: 4,
   },
   noteContent: {
     flex: 1,
   },
-  noteRow: {
+  noteRowOuter: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginHorizontal: -LIST_HORIZONTAL_INSET,
+  },
+  noteRowOuterLast: {
+    borderBottomWidth: 0,
+  },
+  noteRowInner: {
     alignItems: 'center',
-    borderBottomWidth: 1,
     flexDirection: 'row',
+    paddingHorizontal: LIST_HORIZONTAL_INSET,
     paddingVertical: 12,
   },
   noteTitle: {

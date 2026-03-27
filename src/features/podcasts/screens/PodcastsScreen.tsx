@@ -2,9 +2,20 @@ import {Box, Spinner, Text, useColorMode} from '@gluestack-ui/themed';
 import {StackScreenProps} from '@react-navigation/stack';
 import {useFocusEffect} from '@react-navigation/native';
 import {useCallback, useLayoutEffect, useMemo, useRef, useState} from 'react';
-import {SectionList, StyleSheet, TouchableOpacity, View} from 'react-native';
+import {
+  SectionList,
+  StyleSheet,
+  Text as RNText,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
+import {
+  LIST_DIVIDER_DARK,
+  LIST_DIVIDER_LIGHT,
+  LIST_HORIZONTAL_INSET,
+} from '../../../core/ui/listMetrics';
 import {useVaultContext} from '../../../core/vault/VaultContext';
 import {PodcastsStackParamList} from '../../../navigation/types';
 import {PodcastEpisode} from '../../../types';
@@ -17,18 +28,38 @@ type PodcastsScreenProps = StackScreenProps<PodcastsStackParamList, 'Podcasts'>;
 type PodcastSectionListItem = {
   data: PodcastEpisode[];
   rssFeedUrl?: string;
+  sectionIndex: number;
   title: string;
 };
 
 type PodcastSectionHeaderProps = {
   dividerColor: string;
+  labelColor: string;
+  listBackgroundColor: string;
   title: string;
 };
 
-function PodcastSectionHeader({dividerColor, title}: PodcastSectionHeaderProps) {
+function PodcastSectionHeader({
+  dividerColor,
+  labelColor,
+  listBackgroundColor,
+  title,
+}: PodcastSectionHeaderProps) {
   return (
-    <View style={[styles.sectionHeader, {borderBottomColor: dividerColor}]}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+    <View style={[styles.sectionHeader, {backgroundColor: listBackgroundColor}]}>
+      <View
+        pointerEvents="none"
+        style={[styles.sectionHeaderLine, {backgroundColor: dividerColor}]}
+      />
+      <View
+        style={[
+          styles.sectionHeaderLabelWrap,
+          {backgroundColor: listBackgroundColor},
+        ]}>
+        <RNText style={[styles.sectionCaption, {color: labelColor}]}>
+          {title.toUpperCase()}
+        </RNText>
+      </View>
     </View>
   );
 }
@@ -53,7 +84,9 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
   const [selectedEpisodeIds, setSelectedEpisodeIds] = useState<Set<string>>(new Set());
   const markInFlightRef = useRef(false);
   const colorMode = useColorMode();
-  const dividerColor = colorMode === 'dark' ? '#4f4f4f' : '#d6d6d6';
+  const dividerColor = colorMode === 'dark' ? LIST_DIVIDER_DARK : LIST_DIVIDER_LIGHT;
+  const listBackgroundColor = colorMode === 'dark' ? '#121212' : '#ffffff';
+  const sectionLabelColor = colorMode === 'dark' ? '#6a6a6a' : '#7a7a7a';
   const mutedTextColor = colorMode === 'dark' ? '#cfcfcf' : '#616161';
   const selectedCount = selectedEpisodeIds.size;
   const hasSelection = selectedCount > 0;
@@ -229,11 +262,16 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
     ]),
   );
 
-  const sectionData: PodcastSectionListItem[] = sections.map(section => ({
-    data: section.episodes,
-    rssFeedUrl: section.rssFeedUrl,
-    title: section.title,
-  }));
+  const sectionData: PodcastSectionListItem[] = useMemo(
+    () =>
+      sections.map((section, sectionIndex) => ({
+        data: section.episodes,
+        rssFeedUrl: section.rssFeedUrl,
+        sectionIndex,
+        title: section.title,
+      })),
+    [sections],
+  );
 
   return (
     <Box style={styles.container}>
@@ -251,28 +289,37 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
         refreshing={podcastsLoading && sections.length > 0}
         sections={sectionData}
         keyExtractor={item => item.id}
-        renderItem={({item, section}) => (
-          <EpisodeRow
-            activeEpisodeId={activeEpisode?.id ?? null}
-            dividerColor={dividerColor}
-            episode={item}
-            isBatchMarking={isMarkingBatch}
-            isSelected={selectedEpisodeIds.has(item.id)}
-            mutedTextColor={mutedTextColor}
-            onMarkAsPlayed={markEpisodeAsPlayed}
-            onPlayEpisode={playEpisode}
-            onToggleSelect={() => {
-              toggleEpisodeSelection(item.id);
-            }}
-            playbackLoading={playbackLoading}
-            playbackState={playbackState}
-            sectionRssFeedUrl={section.rssFeedUrl}
-            selectionActive={hasSelection}
-          />
-        )}
+        renderItem={({index, item, section}) => {
+          const isLastRow =
+            section.sectionIndex === sectionData.length - 1 &&
+            index === section.data.length - 1;
+
+          return (
+            <EpisodeRow
+              activeEpisodeId={activeEpisode?.id ?? null}
+              dividerColor={dividerColor}
+              episode={item}
+              isBatchMarking={isMarkingBatch}
+              isLastRow={isLastRow}
+              isSelected={selectedEpisodeIds.has(item.id)}
+              mutedTextColor={mutedTextColor}
+              onMarkAsPlayed={markEpisodeAsPlayed}
+              onPlayEpisode={playEpisode}
+              onToggleSelect={() => {
+                toggleEpisodeSelection(item.id);
+              }}
+              playbackLoading={playbackLoading}
+              playbackState={playbackState}
+              sectionRssFeedUrl={section.rssFeedUrl}
+              selectionActive={hasSelection}
+            />
+          );
+        }}
         renderSectionHeader={({section}) => (
           <PodcastSectionHeader
             dividerColor={dividerColor}
+            labelColor={sectionLabelColor}
+            listBackgroundColor={listBackgroundColor}
             title={section.title}
           />
         )}
@@ -294,18 +341,29 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 24,
-    paddingHorizontal: 20,
+    paddingHorizontal: LIST_HORIZONTAL_INSET,
   },
   sectionHeader: {
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    marginTop: 12,
-    paddingBottom: 6,
+    justifyContent: 'center',
+    marginHorizontal: -LIST_HORIZONTAL_INSET,
+    marginTop: 6,
+    minHeight: 28,
   },
-  sectionTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: '700',
+  sectionHeaderLabelWrap: {
+    alignSelf: 'center',
+    paddingHorizontal: 10,
+  },
+  sectionHeaderLine: {
+    height: StyleSheet.hairlineWidth,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: '50%',
+  },
+  sectionCaption: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.9,
   },
   headerBackButton: {
     marginLeft: 12,

@@ -4,12 +4,16 @@ import {StyleSheet, View} from 'react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
+import {LIST_HORIZONTAL_INSET} from '../../../core/ui/listMetrics';
 import {formatRelativeCalendarLabelFromIsoDate} from '../../../core/utils/relativeCalendarLabel';
 import {useVaultContext} from '../../../core/vault/VaultContext';
 import {PodcastEpisode} from '../../../types';
 import {PodcastArtworkImage} from './PodcastArtworkImage';
 import {usePodcastArtwork} from '../hooks/usePodcastArtwork';
 import {PlayerState} from '../services/audioPlayer';
+
+/** Android Image blur when the row is selected (paired with selection overlay). */
+export const SELECTED_ARTWORK_IMAGE_BLUR_RADIUS = 6;
 
 type EpisodeRowProps = {
   activeEpisodeId: string | null;
@@ -25,6 +29,7 @@ type EpisodeRowProps = {
   playbackState: PlayerState;
   sectionRssFeedUrl?: string;
   selectionActive?: boolean;
+  isLastRow?: boolean;
 };
 
 export function EpisodeRow({
@@ -41,6 +46,7 @@ export function EpisodeRow({
   playbackState,
   sectionRssFeedUrl,
   selectionActive = false,
+  isLastRow = false,
 }: EpisodeRowProps) {
   const colorMode = useColorMode();
   const {baseUri} = useVaultContext();
@@ -59,11 +65,16 @@ export function EpisodeRow({
 
   const renderSwipeAction = useCallback(
     () => (
-      <View style={[styles.swipeAction, {borderBottomColor: dividerColor}]}>
+      <View
+        style={[
+          styles.swipeAction,
+          {borderBottomColor: dividerColor},
+          isLastRow ? styles.swipeActionLast : null,
+        ]}>
         <MaterialIcons color="#2e7d32" name="check-circle" size={28} />
       </View>
     ),
-    [dividerColor],
+    [dividerColor, isLastRow],
   );
 
   const markAsPlayed = useCallback(async () => {
@@ -99,7 +110,13 @@ export function EpisodeRow({
       renderLeftActions={renderSwipeAction}
       renderRightActions={renderSwipeAction}
       rightThreshold={56}>
-      <View style={[styles.episodeRow, {borderBottomColor: dividerColor}]}>
+      <View
+        style={[
+          styles.episodeRowOuter,
+          {borderBottomColor: dividerColor},
+          isLastRow ? styles.episodeRowOuterLast : null,
+        ]}>
+        <View style={styles.episodeRowInner}>
         <Pressable
           accessibilityLabel={
             isSelected ? 'Deselect episode' : 'Select episode'
@@ -110,6 +127,7 @@ export function EpisodeRow({
           <View style={styles.artworkContainer}>
             <PodcastArtworkImage
               artworkUri={artworkUri}
+              blurRadius={isSelected ? SELECTED_ARTWORK_IMAGE_BLUR_RADIUS : 0}
               imageStyle={styles.artworkImage}
               placeholderStyle={styles.artworkPlaceholderInner}
             />
@@ -140,6 +158,7 @@ export function EpisodeRow({
             {isPlaying ? 'Playing' : isActive ? 'Paused' : 'Tap to play'}
           </Text>
         </Pressable>
+        </View>
       </View>
     </Swipeable>
   );
@@ -179,10 +198,17 @@ const styles = StyleSheet.create({
   episodeContent: {
     flex: 1,
   },
-  episodeRow: {
+  episodeRowOuter: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginHorizontal: -LIST_HORIZONTAL_INSET,
+  },
+  episodeRowOuterLast: {
+    borderBottomWidth: 0,
+  },
+  episodeRowInner: {
     alignItems: 'center',
-    borderBottomWidth: 1,
     flexDirection: 'row',
+    paddingHorizontal: LIST_HORIZONTAL_INSET,
     paddingVertical: 12,
   },
   episodeTitle: {
@@ -195,8 +221,13 @@ const styles = StyleSheet.create({
   },
   swipeAction: {
     alignItems: 'center',
-    borderBottomWidth: 1,
+    alignSelf: 'stretch',
+    borderBottomWidth: StyleSheet.hairlineWidth,
     justifyContent: 'center',
+    minHeight: 64,
     width: 72,
+  },
+  swipeActionLast: {
+    borderBottomWidth: 0,
   },
 });

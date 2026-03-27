@@ -61,7 +61,7 @@ function leaveComposeScreen(navigation: AddNoteNavigation) {
 
 function navigateToNewNoteDetail(stackNavigation: AddNoteNavigation, created: NoteSummary) {
   const noteTitle = getNoteTitle(created.name);
-  const params = {noteUri: created.uri, noteTitle};
+  const params = {noteFileName: created.name, noteUri: created.uri, noteTitle};
   if (isVaultComposeStack(stackNavigation)) {
     stackNavigation.replace('NoteDetail', params);
     return;

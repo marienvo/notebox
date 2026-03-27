@@ -27,7 +27,7 @@ export type PodcastsStackParamList = {
 
 export type VaultStackParamList = {
   AddNote: {noteTitle: string; noteUri: string} | undefined;
-  NoteDetail: {noteTitle: string; noteUri: string};
+  NoteDetail: {noteFileName?: string; noteTitle: string; noteUri: string};
   Vault: undefined;
 };
 
