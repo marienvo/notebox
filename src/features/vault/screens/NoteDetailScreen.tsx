@@ -7,6 +7,7 @@ import {Pressable, StyleSheet} from 'react-native';
 import Markdown from 'react-native-markdown-display';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
+import {useVaultContext} from '../../../core/vault/VaultContext';
 import {isNavigateToAddNoteAction} from '../../../navigation/navigationActionGuards';
 import {VaultStackParamList} from '../../../navigation/types';
 import {useNotes} from '../hooks/useNotes';
@@ -49,11 +50,18 @@ function createNoteDetailHeaderRight(
 
 export function NoteDetailScreen({navigation, route}: NoteDetailScreenProps) {
   const {read} = useNotes();
+  const {getInboxNoteContentFromCache} = useVaultContext();
   const colorMode = useColorMode();
-  const [content, setContent] = useState('');
+  const [content, setContent] = useState(
+    () => getInboxNoteContentFromCache(route.params.noteUri) ?? '',
+  );
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const hasLoadedNoteOnceRef = useRef(false);
+  const [isLoading, setIsLoading] = useState(
+    () => getInboxNoteContentFromCache(route.params.noteUri) === undefined,
+  );
+  const hasLoadedNoteOnceRef = useRef(
+    getInboxNoteContentFromCache(route.params.noteUri) !== undefined,
+  );
   const markdownTextColor = colorMode === 'dark' ? '#f5f5f5' : '#212121';
   const markdownMutedColor = colorMode === 'dark' ? '#cfcfcf' : '#616161';
 
@@ -154,8 +162,18 @@ export function NoteDetailScreen({navigation, route}: NoteDetailScreenProps) {
   );
 
   useEffect(() => {
-    hasLoadedNoteOnceRef.current = false;
-  }, [route.params.noteUri]);
+    const cached = getInboxNoteContentFromCache(route.params.noteUri);
+    if (cached !== undefined) {
+      setContent(cached);
+      setIsLoading(false);
+      hasLoadedNoteOnceRef.current = true;
+    } else {
+      setContent('');
+      setIsLoading(true);
+      hasLoadedNoteOnceRef.current = false;
+    }
+    setError(null);
+  }, [getInboxNoteContentFromCache, route.params.noteUri]);
 
   useFocusEffect(
     useCallback(() => {

@@ -11,6 +11,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
+import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
 import java.text.Collator
 import java.util.Locale
@@ -179,6 +180,82 @@ class VaultListingModule(private val reactContext: ReactApplicationContext) :
     return out
   }
 
+  /**
+   * Like [rowsToWritableArray] but adds UTF-8 `content` when the file is at most
+   * [INBOX_NOTE_CONTENT_MAX_BYTES]; larger or unreadable files omit `content` so JS falls back to
+   * [readFile].
+   */
+  private fun prepareRowsToWritableArray(
+    rows: List<MarkdownRow>,
+    resolver: ContentResolver,
+  ): WritableArray {
+    val out = Arguments.createArray()
+    for (row in rows) {
+      val map = Arguments.createMap()
+      map.putString("uri", row.uri)
+      map.putString("name", row.name)
+      map.putDouble("lastModified", row.lastModified.toDouble())
+      val body = readInboxMarkdownContentForPrepare(resolver, row.uri)
+      if (body != null) {
+        map.putString("content", body)
+      }
+      out.pushMap(map)
+    }
+    return out
+  }
+
+  /**
+   * Returns full UTF-8 text, or null if skipped (too large), empty file as "", or read failure.
+   */
+  private fun readInboxMarkdownContentForPrepare(resolver: ContentResolver, uriString: String): String? {
+    val uri = Uri.parse(uriString)
+    val doc = documentFileFromStorageUri(uri)
+    val len = doc?.length() ?: -1L
+    if (len > INBOX_NOTE_CONTENT_MAX_BYTES) {
+      return null
+    }
+    return try {
+      resolver.openInputStream(uri)?.use { input ->
+        when {
+          len == 0L -> ""
+          len > 0L && len <= INBOX_NOTE_CONTENT_MAX_BYTES -> {
+            val bytes = ByteArray(len.toInt())
+            var read = 0
+            while (read < len) {
+              val n = input.read(bytes, read, (len - read).toInt())
+              if (n < 0) {
+                break
+              }
+              read += n
+            }
+            String(bytes, StandardCharsets.UTF_8)
+          }
+          else -> {
+            val buffer = ByteArrayOutputStream()
+            val chunk = ByteArray(8192)
+            var total = 0
+            while (total < INBOX_NOTE_CONTENT_MAX_BYTES) {
+              val toRead = minOf(chunk.size, INBOX_NOTE_CONTENT_MAX_BYTES - total)
+              val n = input.read(chunk, 0, toRead)
+              if (n <= 0) {
+                break
+              }
+              buffer.write(chunk, 0, n)
+              total += n
+            }
+            if (input.read() != -1) {
+              return null
+            }
+            String(buffer.toByteArray(), StandardCharsets.UTF_8)
+          }
+        }
+      }
+    } catch (e: Exception) {
+      Log.w(TAG, "readInboxMarkdownContentForPrepare failed for $uriString", e)
+      null
+    }
+  }
+
   private fun compareDescendingLastModified(left: Long, right: Long): Int {
     val l = if (left > 0L) left else 0L
     val r = if (right > 0L) right else 0L
@@ -282,7 +359,7 @@ class VaultListingModule(private val reactContext: ReactApplicationContext) :
 
     val out = Arguments.createMap()
     out.putString("settings", raw)
-    out.putArray("inboxNotes", rowsToWritableArray(inboxRows))
+    out.putArray("inboxNotes", prepareRowsToWritableArray(inboxRows, resolver))
     return out
   }
 
@@ -360,6 +437,8 @@ class VaultListingModule(private val reactContext: ReactApplicationContext) :
     private const val INBOX_DIR_NAME = "Inbox"
     private const val GENERAL_DIR_NAME = "General"
     private const val INBOX_INDEX_FILE_NAME = "Inbox.md"
+    /** Skip prefetching body when longer than this (JS uses readFile instead). */
+    private const val INBOX_NOTE_CONTENT_MAX_BYTES = 512 * 1024
     /** Matches `serializeSettings(defaultSettings)` in noteboxStorage.ts (JSON.stringify + trailing newline). */
     private const val DEFAULT_SETTINGS_JSON =
       "{\n  \"displayName\": \"My Notebox\"\n}\n"

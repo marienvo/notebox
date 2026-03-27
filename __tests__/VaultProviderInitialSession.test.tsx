@@ -24,6 +24,7 @@ jest.mock('../src/core/observability', () => ({
 type VaultInitialSession = {
   uri: string;
   settings: {displayName: string};
+  inboxContentByUri: Record<string, string> | null;
   inboxPrefetch: NoteSummary[] | null;
 };
 
@@ -81,11 +82,13 @@ describe('VaultProvider initialSession hydration', () => {
     const initialSession: VaultInitialSession = {
       uri: 'content://vault-root',
       settings: {displayName: 'Dev Notebox'},
+      inboxContentByUri: null,
       inboxPrefetch: initialInboxPrefetch,
     };
 
     getSavedUriMock.mockResolvedValue(initialSession.uri);
     prepareVaultSessionMock.mockResolvedValue({
+      inboxContentByUri: null,
       inboxPrefetch: null,
       sessionPrep: 'legacy',
       settings: initialSession.settings,

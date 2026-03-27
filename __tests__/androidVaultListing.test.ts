@@ -38,6 +38,7 @@ describe('tryPrepareNoteboxSessionNative', () => {
     });
 
     await expect(tryPrepareNoteboxSessionNative('content://root')).resolves.toEqual({
+      inboxContentByUri: null,
       inboxPrefetch: [{lastModified: 2, name: 'b.md', uri: 'content://in/b.md'}],
       settingsJson: settingsSample,
     });
@@ -50,6 +51,7 @@ describe('tryPrepareNoteboxSessionNative', () => {
     prepare.mockResolvedValue(settingsSample);
 
     await expect(tryPrepareNoteboxSessionNative('content://root')).resolves.toEqual({
+      inboxContentByUri: null,
       inboxPrefetch: null,
       settingsJson: settingsSample,
     });
@@ -83,7 +85,31 @@ describe('tryPrepareNoteboxSessionNative', () => {
     });
 
     await expect(tryPrepareNoteboxSessionNative('content://root')).resolves.toEqual({
+      inboxContentByUri: null,
       inboxPrefetch: [{lastModified: null, name: 'n.md', uri: 'u'}],
+      settingsJson: settingsSample,
+    });
+  });
+
+  it('maps optional content into inboxContentByUri by normalized uri', async () => {
+    const prepare = (
+      NativeModules.NoteboxVaultListing as {prepareNoteboxSession: jest.Mock}
+    ).prepareNoteboxSession;
+    prepare.mockResolvedValue({
+      inboxNotes: [
+        {
+          content: '# Hello',
+          lastModified: 2,
+          name: 'b.md',
+          uri: 'content://in/b.md',
+        },
+      ],
+      settings: settingsSample,
+    });
+
+    await expect(tryPrepareNoteboxSessionNative('content://root')).resolves.toEqual({
+      inboxContentByUri: {'content://in/b.md': '# Hello'},
+      inboxPrefetch: [{lastModified: 2, name: 'b.md', uri: 'content://in/b.md'}],
       settingsJson: settingsSample,
     });
   });

@@ -13,15 +13,25 @@ import {appBreadcrumb, reportUnexpectedError, syncVaultSessionContext} from '../
 import {elapsedMsSinceJsBundleEval} from '../observability/startupTiming';
 import {getSavedUri} from '../storage/appStorage';
 import {clearAllPlaylistReadCoalescer} from '../storage/noteboxStorage';
+import {normalizeNoteUri} from '../storage/noteUriNormalize';
 import {clearPodcastBootstrapCache} from '../../features/podcasts/services/podcastBootstrapCache';
 import {NoteboxSettings, NoteSummary} from '../../types';
 import {prepareVaultSession} from './applyVaultSession';
 
+type InboxContentCacheSession = {
+  map: Map<string, string>;
+  uri: string;
+};
+
 type VaultContextValue = {
   baseUri: string | null;
+  clearInboxContentCache: () => void;
   consumeInboxPrefetch: (forUri: string) => NoteSummary[] | null;
+  getInboxNoteContentFromCache: (noteUri: string) => string | undefined;
   isLoading: boolean;
+  pruneInboxNoteContentFromCache: (noteUris: readonly string[]) => void;
   refreshSession: () => Promise<void>;
+  setInboxNoteContentInCache: (noteUri: string, content: string) => void;
   setSessionUri: (nextUri: string | null) => Promise<void>;
   settings: NoteboxSettings | null;
   setSettings: (nextSettings: NoteboxSettings) => void;
@@ -34,9 +44,28 @@ type VaultProviderProps = {
   initialSession?: {
     uri: string;
     settings: NoteboxSettings;
+    inboxContentByUri: Record<string, string> | null;
     inboxPrefetch: NoteSummary[] | null;
   } | null;
 };
+
+function recordToInboxContentCache(
+  vaultUri: string,
+  record: Record<string, string> | null | undefined,
+): InboxContentCacheSession | null {
+  if (!record) {
+    return null;
+  }
+  const entries = Object.entries(record);
+  if (entries.length === 0) {
+    return null;
+  }
+  const map = new Map<string, string>();
+  for (const [k, v] of entries) {
+    map.set(normalizeNoteUri(k), v);
+  }
+  return {map, uri: vaultUri};
+}
 
 export function VaultProvider({children, initialSession}: VaultProviderProps) {
   const [baseUri, setBaseUri] = useState<string | null>(initialSession?.uri ?? null);
@@ -50,6 +79,63 @@ export function VaultProvider({children, initialSession}: VaultProviderProps) {
       : null,
   );
 
+  const inboxContentCacheRef = useRef<InboxContentCacheSession | null>(
+    initialSession
+      ? recordToInboxContentCache(
+          initialSession.uri,
+          initialSession.inboxContentByUri,
+        )
+      : null,
+  );
+
+  const clearSessionPrefetchRefs = useCallback(() => {
+    inboxPrefetchRef.current = null;
+    inboxContentCacheRef.current = null;
+  }, []);
+
+  const clearInboxContentCache = useCallback(() => {
+    inboxContentCacheRef.current = null;
+  }, []);
+
+  const getInboxNoteContentFromCache = useCallback(
+    (noteUri: string): string | undefined => {
+      const session = inboxContentCacheRef.current;
+      if (session == null || baseUri == null || session.uri !== baseUri) {
+        return undefined;
+      }
+      return session.map.get(normalizeNoteUri(noteUri));
+    },
+    [baseUri],
+  );
+
+  const setInboxNoteContentInCache = useCallback(
+    (noteUri: string, content: string) => {
+      if (baseUri == null) {
+        return;
+      }
+      let session = inboxContentCacheRef.current;
+      if (session == null || session.uri !== baseUri) {
+        session = {map: new Map(), uri: baseUri};
+        inboxContentCacheRef.current = session;
+      }
+      session.map.set(normalizeNoteUri(noteUri), content);
+    },
+    [baseUri],
+  );
+
+  const pruneInboxNoteContentFromCache = useCallback(
+    (noteUris: readonly string[]) => {
+      const session = inboxContentCacheRef.current;
+      if (session == null || baseUri == null || session.uri !== baseUri) {
+        return;
+      }
+      for (const u of noteUris) {
+        session.map.delete(normalizeNoteUri(u));
+      }
+    },
+    [baseUri],
+  );
+
   const consumeInboxPrefetch = useCallback((forUri: string): NoteSummary[] | null => {
     const pending = inboxPrefetchRef.current;
     if (pending == null || pending.uri !== forUri) {
@@ -60,21 +146,25 @@ export function VaultProvider({children, initialSession}: VaultProviderProps) {
   }, []);
 
   const applyVaultSessionUri = useCallback(async (nextUri: string) => {
-    inboxPrefetchRef.current = null;
+    clearSessionPrefetchRefs();
 
     const prepared = await prepareVaultSession(nextUri);
     if (prepared.inboxPrefetch !== null) {
       inboxPrefetchRef.current = {uri: nextUri, notes: prepared.inboxPrefetch};
     }
+    inboxContentCacheRef.current = recordToInboxContentCache(
+      nextUri,
+      prepared.inboxContentByUri,
+    );
 
     setBaseUri(nextUri);
     setSettings(prepared.settings);
-  }, []);
+  }, [clearSessionPrefetchRefs]);
 
   const setSessionUri = useCallback(
     async (nextUri: string | null) => {
       if (!nextUri) {
-        inboxPrefetchRef.current = null;
+        clearSessionPrefetchRefs();
         setBaseUri(null);
         setSettings(null);
         clearAllPlaylistReadCoalescer();
@@ -91,7 +181,7 @@ export function VaultProvider({children, initialSession}: VaultProviderProps) {
         throw error;
       }
     },
-    [applyVaultSessionUri],
+    [applyVaultSessionUri, clearSessionPrefetchRefs],
   );
 
   const refreshSession = useCallback(async () => {
@@ -106,7 +196,7 @@ export function VaultProvider({children, initialSession}: VaultProviderProps) {
       });
 
       if (!savedUri) {
-        inboxPrefetchRef.current = null;
+        clearSessionPrefetchRefs();
         setBaseUri(null);
         setSettings(null);
         appBreadcrumb({
@@ -130,7 +220,7 @@ export function VaultProvider({children, initialSession}: VaultProviderProps) {
         },
       });
     } catch (error) {
-      inboxPrefetchRef.current = null;
+      clearSessionPrefetchRefs();
       setBaseUri(null);
       setSettings(null);
       reportUnexpectedError(error, {flow: 'vault_restore'});
@@ -143,7 +233,7 @@ export function VaultProvider({children, initialSession}: VaultProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [applyVaultSessionUri]);
+  }, [applyVaultSessionUri, clearSessionPrefetchRefs]);
 
   useEffect(() => {
     let isActive = true;
@@ -185,14 +275,29 @@ export function VaultProvider({children, initialSession}: VaultProviderProps) {
   const value = useMemo(
     () => ({
       baseUri,
+      clearInboxContentCache,
       consumeInboxPrefetch,
+      getInboxNoteContentFromCache,
       isLoading,
+      pruneInboxNoteContentFromCache,
       refreshSession,
+      setInboxNoteContentInCache,
       setSessionUri,
       settings,
       setSettings,
     }),
-    [baseUri, consumeInboxPrefetch, isLoading, refreshSession, setSessionUri, settings],
+    [
+      baseUri,
+      clearInboxContentCache,
+      consumeInboxPrefetch,
+      getInboxNoteContentFromCache,
+      isLoading,
+      pruneInboxNoteContentFromCache,
+      refreshSession,
+      setInboxNoteContentInCache,
+      setSessionUri,
+      settings,
+    ],
   );
 
   return <VaultContext.Provider value={value}>{children}</VaultContext.Provider>;

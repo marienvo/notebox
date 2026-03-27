@@ -11,6 +11,7 @@ import {appBreadcrumb} from '../src/core/observability/appBreadcrumb';
 type VaultInitialSessionShape = {
   uri: string;
   settings: {displayName: string};
+  inboxContentByUri: Record<string, string> | null;
   inboxPrefetch: Array<{lastModified: number | null; name: string; uri: string}> | null;
 };
 
@@ -59,9 +60,13 @@ jest.mock('../src/core/observability/appBreadcrumb', () => ({
 let capturedVaultInitialSession: VaultInitialSessionShape | null = null;
 const mockVaultContextValue = {
   baseUri: null,
+  clearInboxContentCache: jest.fn(),
   consumeInboxPrefetch: () => null,
+  getInboxNoteContentFromCache: () => undefined,
   isLoading: false,
+  pruneInboxNoteContentFromCache: jest.fn(),
   refreshSession: jest.fn(),
+  setInboxNoteContentInCache: jest.fn(),
   setSessionUri: jest.fn(),
   settings: null,
   setSettings: jest.fn(),
@@ -119,6 +124,7 @@ describe('App bootstrap preload', () => {
     });
 
     prepareVaultSessionMock.mockResolvedValue({
+      inboxContentByUri: null,
       settings: {displayName: 'Notebook A'},
       inboxPrefetch: null,
       sessionPrep: 'native',
@@ -163,6 +169,7 @@ describe('App bootstrap preload', () => {
     expect(capturedVaultInitialSession).toEqual({
       uri: savedUri,
       settings: {displayName: 'Notebook A'},
+      inboxContentByUri: null,
       inboxPrefetch: null,
     });
 

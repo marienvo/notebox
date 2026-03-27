@@ -38,6 +38,7 @@ type InitialRoute = keyof RootStackParamList;
 type VaultInitialSession = {
   uri: string;
   settings: NoteboxSettings;
+  inboxContentByUri: Record<string, string> | null;
   inboxPrefetch: NoteSummary[] | null;
 };
 
@@ -167,6 +168,7 @@ function App() {
             const initial: VaultInitialSession = {
               uri: savedUri,
               settings: prepared.settings,
+              inboxContentByUri: prepared.inboxContentByUri,
               inboxPrefetch: prepared.inboxPrefetch,
             };
 
