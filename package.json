@@ -1,6 +1,6 @@
 {
   "name": "notebox",
-  "version": "0.6.16",
+  "version": "0.6.19",
   "private": true,
   "scripts": {
     "android": "react-native run-android",

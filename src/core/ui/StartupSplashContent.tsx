@@ -20,11 +20,13 @@ import {
 } from './startupSplashSpectrum';
 
 /** Startup spectrum: speech-like formants, phrase gaps (frame callback). */
-const BAR_COUNT = 20;
-const MAX_BAR_H = 182;
+const BAR_COUNT = 10;
+/** Uniform scale for bar heights, cluster width, and derived bar/gap pixels (bar count unchanged). */
+const STARTUP_SPECTRUM_VISUAL_SCALE = 1.321918;
+const MAX_BAR_H = Math.round(146 * STARTUP_SPECTRUM_VISUAL_SCALE);
 const BAR_SPLIT = Math.ceil(BAR_COUNT / 2);
 /** Spectrum cluster width versus full splash width (used to derive bar pixel widths). */
-const SPECTRUM_WIDTH_FRAC = 0.6;
+const SPECTRUM_WIDTH_FRAC = 0.3 * STARTUP_SPECTRUM_VISUAL_SCALE;
 
 const BAR_INDICES = Array.from({length: BAR_COUNT}, (_, i) => i);
 
@@ -53,7 +55,9 @@ function computeBarLayout(windowWidth: number): {
   const barWidthPx = Math.max(4, Math.round((colPx * 2) / 3));
   const barGapPx = Math.max(2, Math.round(barWidthPx / 2));
   const minBarH =
-    barWidthPx >= MAX_BAR_H ? MAX_BAR_H - 6 : barWidthPx;
+    barWidthPx >= MAX_BAR_H
+      ? MAX_BAR_H - Math.round(6 * STARTUP_SPECTRUM_VISUAL_SCALE)
+      : barWidthPx;
   return {barGapPx, barWidthPx, minBarH};
 }
 
