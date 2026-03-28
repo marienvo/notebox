@@ -74,6 +74,7 @@ RootStack
 ## Visual design
 
 - **Accent color** for UI highlights and progress (including the Podcasts header refresh strip): `#4FAFE6`. See [accent colors](../design/accent-colors.md).
+- On first paint while the app resolves the initial route, the loading surface shows the **Eskerra** wordmark over an animated speech-style waveform (replacing the prior logo treatment); backgrounds match the main light/dark shells (`#f5f5f5` / `#121212`).
 
 ## Source layout (feature-first)
 

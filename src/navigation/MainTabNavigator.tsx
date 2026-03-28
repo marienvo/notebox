@@ -140,7 +140,7 @@ function VaultStackScreen() {
           headerStyle: styles.tabHeader,
           headerTintColor: '#ffffff',
           headerTitleStyle: styles.tabHeaderTitle,
-          title: route.params?.noteUri ? 'Edit note' : 'New note',
+          title: route.params?.noteUri ? 'Edit entry' : 'New entry',
         })}
       />
       <VaultStack.Screen
@@ -210,7 +210,7 @@ export function MainTabNavigator() {
           options={{
             tabBarButton,
             tabBarIcon: inboxTabIcon,
-            title: 'Inbox',
+            title: 'Log',
           }}
         />
         <Tabs.Screen
@@ -219,7 +219,7 @@ export function MainTabNavigator() {
           options={{
             tabBarButton,
             tabBarIcon: newNoteTabIcon,
-            title: 'Note',
+            title: 'Entry',
           }}
         />
         <Tabs.Screen

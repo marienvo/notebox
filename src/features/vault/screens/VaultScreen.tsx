@@ -128,7 +128,7 @@ export function VaultScreen({navigation}: VaultScreenProps) {
       await deleteNotes(selectedUris);
       setSelectedNoteUris(new Set());
     } catch (deleteNotesError) {
-      const fallbackMessage = 'Could not delete selected notes.';
+      const fallbackMessage = 'Could not delete selected entries.';
       setDeleteError(
         deleteNotesError instanceof Error ? deleteNotesError.message : fallbackMessage,
       );
@@ -170,7 +170,7 @@ export function VaultScreen({navigation}: VaultScreenProps) {
       tabNavigation.setOptions({
         headerLeft: undefined,
         headerRight: renderSettingsHeaderRight,
-        headerTitle: 'Inbox',
+        headerTitle: 'Log',
       });
       return;
     }
@@ -185,7 +185,7 @@ export function VaultScreen({navigation}: VaultScreenProps) {
       tabNavigation.setOptions({
         headerLeft: undefined,
         headerRight: undefined,
-        headerTitle: 'Inbox',
+        headerTitle: 'Log',
       });
     };
   }, [
@@ -213,7 +213,7 @@ export function VaultScreen({navigation}: VaultScreenProps) {
           headerShown: true,
           headerLeft: hasSelection ? renderSelectionHeaderLeft : undefined,
           headerRight: hasSelection ? renderSelectionHeaderRight : renderSettingsHeaderRight,
-          headerTitle: hasSelection ? `${selectedCount} selected` : 'Inbox',
+          headerTitle: hasSelection ? `${selectedCount} selected` : 'Log',
         });
       };
 
@@ -301,7 +301,7 @@ export function VaultScreen({navigation}: VaultScreenProps) {
         ListEmptyComponent={
           !isLoading ? (
             <Text style={styles.status}>
-              No markdown notes found in Inbox. Add one via the Note tab.
+              No markdown entries found in Log. Add one via the Entry tab.
             </Text>
           ) : null
         }

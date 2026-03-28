@@ -581,7 +581,7 @@ describe('noteboxStorage', () => {
   test('deleteInboxNotes rejects URIs outside Inbox', async () => {
     await expect(
       deleteInboxNotes(baseUri, [`${baseUri}/General/not-allowed.md`]),
-    ).rejects.toThrow('Could not verify that the selected note belongs to Inbox.');
+    ).rejects.toThrow('Could not verify that the selected entry belongs to Log.');
     expect(unlinkMock).not.toHaveBeenCalled();
   });
 

@@ -455,7 +455,7 @@ export async function deleteInboxNotes(
   for (const noteUri of noteUris) {
     const fileName = noteNameFromUri(noteUri);
     if (!fileName.startsWith(`${INBOX_DIRECTORY_NAME}/`)) {
-      throw new Error('Only Inbox notes can be deleted.');
+      throw new Error('Only Log entries can be deleted.');
     }
     delete index[fileName];
     await AsyncStorage.removeItem(devNoteKey(fileName));
