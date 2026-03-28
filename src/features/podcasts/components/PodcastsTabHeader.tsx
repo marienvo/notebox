@@ -11,10 +11,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import {ACCENT_COLOR} from '../../../core/ui/accentColor';
 import {usePlayerContext} from '../context/PlayerContext';
-
-/** App accent; see repo `specs/design/accent-colors.md`. */
-const ACCENT = '#4FAFE6';
 
 const STRIP_HEIGHT = 3;
 const SEGMENT_FRACTION = 0.38;
@@ -113,11 +111,11 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(79, 175, 230, 0.35)',
   },
   determinateFill: {
-    backgroundColor: ACCENT,
+    backgroundColor: ACCENT_COLOR,
     height: '100%',
   },
   indeterminateSegment: {
-    backgroundColor: ACCENT,
+    backgroundColor: ACCENT_COLOR,
     height: '100%',
     position: 'absolute',
     left: 0,

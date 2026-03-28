@@ -1,7 +1,7 @@
 import {Box, Spinner, Text, useColorMode} from '@gluestack-ui/themed';
 import {StackScreenProps} from '@react-navigation/stack';
 import {useFocusEffect} from '@react-navigation/native';
-import {useCallback, useLayoutEffect, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {
   RefreshControl,
   SectionList,
@@ -71,6 +71,9 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
   const {
     activeEpisode,
     allEpisodes,
+    clearMiniPlayerArtworkSelection,
+    markEpisodeAsPlayed,
+    miniPlayerArtworkSelected,
     playbackError,
     playbackLoading,
     playbackState,
@@ -84,6 +87,7 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
   const [markError, setMarkError] = useState<string | null>(null);
   const [pullRefreshInProgress, setPullRefreshInProgress] = useState(false);
   const [refreshPullError, setRefreshPullError] = useState<string | null>(null);
+  const [isMarkingArtwork, setIsMarkingArtwork] = useState(false);
   const [isMarkingBatch, setIsMarkingBatch] = useState(false);
   const [selectedEpisodeIds, setSelectedEpisodeIds] = useState<Set<string>>(new Set());
   const markInFlightRef = useRef(false);
@@ -94,6 +98,7 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
   const mutedTextColor = colorMode === 'dark' ? '#cfcfcf' : '#616161';
   const selectedCount = selectedEpisodeIds.size;
   const hasSelection = selectedCount > 0;
+  const isPodcastsHeaderSelectionMode = hasSelection || miniPlayerArtworkSelected;
 
   const episodeById = useMemo(
     () => new Map(allEpisodes.map(episode => [episode.id, episode])),
@@ -147,6 +152,39 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
       return nextSelected;
     });
   }, []);
+
+  useEffect(() => {
+    if (miniPlayerArtworkSelected) {
+      setSelectedEpisodeIds(new Set());
+    }
+  }, [miniPlayerArtworkSelected]);
+
+  useEffect(() => {
+    if (selectedCount > 0) {
+      clearMiniPlayerArtworkSelection();
+    }
+  }, [clearMiniPlayerArtworkSelection, selectedCount]);
+
+  const handleMarkArtworkEpisodeAsPlayed = useCallback(async () => {
+    if (markInFlightRef.current || isMarkingArtwork || !activeEpisode) {
+      return;
+    }
+
+    setMarkError(null);
+    markInFlightRef.current = true;
+    setIsMarkingArtwork(true);
+    try {
+      await markEpisodeAsPlayed(activeEpisode);
+    } catch (markEpisodeError) {
+      const fallbackMessage = 'Could not mark episode as played.';
+      setMarkError(
+        markEpisodeError instanceof Error ? markEpisodeError.message : fallbackMessage,
+      );
+    } finally {
+      markInFlightRef.current = false;
+      setIsMarkingArtwork(false);
+    }
+  }, [activeEpisode, isMarkingArtwork, markEpisodeAsPlayed]);
 
   const handleMarkSelectedAsPlayed = useCallback(async () => {
     if (markInFlightRef.current || isMarkingBatch || !baseUri) {
@@ -205,20 +243,32 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
   const renderSelectionHeaderRight = useCallback(
     () => (
       <TouchableOpacity
-        disabled={isMarkingBatch}
+        disabled={isMarkingBatch || isMarkingArtwork}
         hitSlop={{bottom: 8, left: 8, right: 8, top: 8}}
         onPress={() => {
-          handleMarkSelectedAsPlayed().catch(() => undefined);
+          if (hasSelection) {
+            handleMarkSelectedAsPlayed().catch(() => undefined);
+          } else if (miniPlayerArtworkSelected && activeEpisode) {
+            handleMarkArtworkEpisodeAsPlayed().catch(() => undefined);
+          }
         }}
         style={styles.headerActionButton}>
-        {isMarkingBatch ? (
+        {isMarkingBatch || isMarkingArtwork ? (
           <Spinner size="small" />
         ) : (
           <MaterialIcons color="#ffffff" name="archive" size={24} />
         )}
       </TouchableOpacity>
     ),
-    [handleMarkSelectedAsPlayed, isMarkingBatch],
+    [
+      activeEpisode,
+      handleMarkArtworkEpisodeAsPlayed,
+      handleMarkSelectedAsPlayed,
+      hasSelection,
+      isMarkingArtwork,
+      isMarkingBatch,
+      miniPlayerArtworkSelected,
+    ],
   );
 
   useLayoutEffect(() => {
@@ -230,7 +280,7 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
       return;
     }
 
-    if (!hasSelection) {
+    if (!isPodcastsHeaderSelectionMode) {
       tabNavigation.setOptions({
         headerLeft: undefined,
         headerRight: undefined,
@@ -240,9 +290,9 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
     }
 
     tabNavigation.setOptions({
-      headerLeft: renderSelectionHeaderLeft,
+      headerLeft: hasSelection ? renderSelectionHeaderLeft : undefined,
       headerRight: renderSelectionHeaderRight,
-      headerTitle: `${selectedCount} selected`,
+      headerTitle: hasSelection ? `${selectedCount} selected` : 'Podcasts',
     });
 
     return () => {
@@ -254,6 +304,7 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
     };
   }, [
     hasSelection,
+    isPodcastsHeaderSelectionMode,
     isPodcastsTopRoute,
     navigation,
     renderSelectionHeaderLeft,
@@ -275,7 +326,7 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
         tabNavigation.setOptions({
           headerShown: true,
           headerLeft: hasSelection ? renderSelectionHeaderLeft : undefined,
-          headerRight: hasSelection ? renderSelectionHeaderRight : undefined,
+          headerRight: isPodcastsHeaderSelectionMode ? renderSelectionHeaderRight : undefined,
           headerTitle: hasSelection ? `${selectedCount} selected` : 'Podcasts',
         });
       };
@@ -287,6 +338,7 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
       return () => cancelAnimationFrame(frameId);
     }, [
       hasSelection,
+      isPodcastsHeaderSelectionMode,
       isPodcastsTopRoute,
       navigation,
       renderSelectionHeaderLeft,

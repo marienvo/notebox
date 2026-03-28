@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import {
+  clearPlaylist,
   readPlaylistCoalesced,
   writePlaylist,
 } from '../../../core/storage/noteboxStorage';
@@ -12,12 +13,16 @@ import {
   warmPodcastArtworkCache,
 } from '../services/podcastImageCache';
 
+const MIN_PERSIST_POSITION_MS = 10_000;
+
 type UsePlayerResult = {
   activeEpisode: PodcastEpisode | null;
+  clearNowPlayingIfMatchesEpisode: (episodeId: string) => Promise<void>;
   error: string | null;
   isLoading: boolean;
   playEpisode: (episode: PodcastEpisode) => Promise<void>;
   progress: PlayerProgress;
+  resyncPlaylistFromDisk: () => Promise<void>;
   seekTo: (positionMs: number) => Promise<void>;
   state: PlayerState;
   togglePlayback: () => Promise<void>;
@@ -25,6 +30,8 @@ type UsePlayerResult = {
 
 type UsePlayerOptions = {
   onMarkAsPlayed: (episode: PodcastEpisode) => Promise<void>;
+  podcastsCatalogReady: boolean;
+  podcastsLoading: boolean;
 };
 
 function toPlaylistEntry(
@@ -46,23 +53,33 @@ const emptyProgress: PlayerProgress = {
 
 export function usePlayer(
   episodesById: Map<string, PodcastEpisode>,
-  {onMarkAsPlayed}: UsePlayerOptions,
+  {onMarkAsPlayed, podcastsCatalogReady, podcastsLoading}: UsePlayerOptions,
 ): UsePlayerResult {
   const {baseUri} = useVaultContext();
   const player = useMemo(() => getAudioPlayer(), []);
   const activeEpisodeRef = useRef<PodcastEpisode | null>(null);
   const loadedEpisodeIdRef = useRef<string | null>(null);
+  const baseUriRef = useRef<string | null>(null);
 
   const [activeEpisode, setActiveEpisode] = useState<PodcastEpisode | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState<PlayerProgress>(emptyProgress);
   const [savedPlaylistEntry, setSavedPlaylistEntry] = useState<PlaylistEntry | null>(null);
+  const savedPlaylistEntryRef = useRef<PlaylistEntry | null>(null);
   const [state, setState] = useState<PlayerState>('idle');
+
+  useEffect(() => {
+    savedPlaylistEntryRef.current = savedPlaylistEntry;
+  }, [savedPlaylistEntry]);
 
   useEffect(() => {
     activeEpisodeRef.current = activeEpisode;
   }, [activeEpisode]);
+
+  useEffect(() => {
+    baseUriRef.current = baseUri ?? null;
+  }, [baseUri]);
 
   useEffect(() => {
     const removeProgressListener = player.addProgressListener(nextProgress => {
@@ -78,10 +95,19 @@ export function usePlayer(
         return;
       }
 
-      onMarkAsPlayed(activeEpisodeAtEnd).catch(markError => {
-        const fallbackMessage = 'Could not mark episode as played.';
-        setError(markError instanceof Error ? markError.message : fallbackMessage);
-      });
+      const uri = baseUriRef.current;
+      setSavedPlaylistEntry(null);
+      (async () => {
+        try {
+          if (uri) {
+            await clearPlaylist(uri);
+          }
+          await onMarkAsPlayed(activeEpisodeAtEnd);
+        } catch (markError) {
+          const fallbackMessage = 'Could not mark episode as played.';
+          setError(markError instanceof Error ? markError.message : fallbackMessage);
+        }
+      })().catch(() => undefined);
     });
 
     return () => {
@@ -90,20 +116,6 @@ export function usePlayer(
       removeEndedListener();
     };
   }, [onMarkAsPlayed, player]);
-
-  const persistCurrentProgress = useCallback(async () => {
-    if (!baseUri || !activeEpisodeRef.current) {
-      return null;
-    }
-
-    const latestProgress = await player.getProgress();
-    setProgress(latestProgress);
-    await writePlaylist(
-      baseUri,
-      toPlaylistEntry(activeEpisodeRef.current, latestProgress),
-    );
-    return latestProgress;
-  }, [baseUri, player]);
 
   useEffect(() => {
     if (!baseUri) {
@@ -162,6 +174,34 @@ export function usePlayer(
     setState(previousState => (previousState === 'idle' ? 'paused' : previousState));
   }, [episodesById, savedPlaylistEntry]);
 
+  useEffect(() => {
+    if (!baseUri || !savedPlaylistEntry || podcastsLoading || !podcastsCatalogReady) {
+      return;
+    }
+
+    if (episodesById.has(savedPlaylistEntry.episodeId)) {
+      return;
+    }
+
+    setSavedPlaylistEntry(null);
+    setActiveEpisode(null);
+    setProgress(emptyProgress);
+    setState('idle');
+    loadedEpisodeIdRef.current = null;
+
+    (async () => {
+      try {
+        await player.stop();
+        await clearPlaylist(baseUri);
+      } catch (cleanupError) {
+        const fallbackMessage = 'Could not clear stale playlist.';
+        setError(
+          cleanupError instanceof Error ? cleanupError.message : fallbackMessage,
+        );
+      }
+    })().catch(() => undefined);
+  }, [baseUri, episodesById, player, podcastsCatalogReady, podcastsLoading, savedPlaylistEntry]);
+
   const playEpisode = useCallback(
     async (episode: PodcastEpisode) => {
       setError(null);
@@ -214,16 +254,45 @@ export function usePlayer(
     try {
       if (state === 'playing') {
         await player.pause();
-        const latestProgress = await persistCurrentProgress();
+        const latestProgress = await player.getProgress();
+        setProgress(latestProgress);
+        setState('paused');
+
         const activeEpisodeForMarking = activeEpisodeRef.current;
         const playbackRatio =
-          latestProgress?.durationMs && latestProgress.durationMs > 0
+          latestProgress.durationMs && latestProgress.durationMs > 0
             ? latestProgress.positionMs / latestProgress.durationMs
             : 0;
-        if (activeEpisodeForMarking && playbackRatio >= 0.8) {
-          await onMarkAsPlayed(activeEpisodeForMarking);
-        }
-        setState('paused');
+        const uri = baseUriRef.current;
+
+        (async () => {
+          try {
+            if (!uri || !activeEpisodeForMarking) {
+              return;
+            }
+            if (latestProgress.positionMs < MIN_PERSIST_POSITION_MS) {
+              await clearPlaylist(uri);
+              setSavedPlaylistEntry(null);
+            } else {
+              const entry = toPlaylistEntry(activeEpisodeForMarking, latestProgress);
+              await writePlaylist(uri, entry);
+              setSavedPlaylistEntry(entry);
+            }
+            if (
+              playbackRatio >= 0.8 &&
+              latestProgress.positionMs >= MIN_PERSIST_POSITION_MS &&
+              activeEpisodeForMarking
+            ) {
+              await onMarkAsPlayed(activeEpisodeForMarking);
+            }
+          } catch (persistError) {
+            const fallbackMessage = 'Could not save playback position.';
+            setError(
+              persistError instanceof Error ? persistError.message : fallbackMessage,
+            );
+          }
+        })().catch(() => undefined);
+
         return;
       }
 
@@ -242,7 +311,7 @@ export function usePlayer(
     } finally {
       setIsLoading(false);
     }
-  }, [onMarkAsPlayed, persistCurrentProgress, playEpisode, player, state]);
+  }, [onMarkAsPlayed, playEpisode, player, state]);
 
   const seekTo = useCallback(
     async (positionMs: number) => {
@@ -251,28 +320,71 @@ export function usePlayer(
       }
 
       await player.seekTo(positionMs);
-      const nextProgress: PlayerProgress = {
-        durationMs: progress.durationMs,
-        positionMs,
-      };
+      const nextProgress = await player.getProgress();
       setProgress(nextProgress);
+    },
+    [player],
+  );
 
-      if (baseUri) {
-        await writePlaylist(
-          baseUri,
-          toPlaylistEntry(activeEpisodeRef.current, nextProgress),
-        );
+  const clearNowPlayingIfMatchesEpisode = useCallback(
+    async (episodeId: string) => {
+      const uri = baseUriRef.current;
+      const matchesActive = activeEpisodeRef.current?.id === episodeId;
+      const matchesSaved = savedPlaylistEntryRef.current?.episodeId === episodeId;
+      if (!matchesActive && !matchesSaved) {
+        return;
+      }
+
+      setSavedPlaylistEntry(null);
+      setActiveEpisode(null);
+      setProgress(emptyProgress);
+      setState('idle');
+      loadedEpisodeIdRef.current = null;
+
+      if (!uri) {
+        return;
+      }
+
+      try {
+        await player.stop();
+        await clearPlaylist(uri);
+      } catch (cleanupError) {
+        const fallbackMessage = 'Could not clear playlist after marking as played.';
+        setError(cleanupError instanceof Error ? cleanupError.message : fallbackMessage);
       }
     },
-    [baseUri, player, progress.durationMs],
+    [player],
   );
+
+  const resyncPlaylistFromDisk = useCallback(async () => {
+    const uri = baseUriRef.current;
+    if (!uri) {
+      setSavedPlaylistEntry(null);
+      setActiveEpisode(null);
+      setProgress(emptyProgress);
+      setState('idle');
+      loadedEpisodeIdRef.current = null;
+      return;
+    }
+
+    try {
+      await player.ensureSetup();
+      const saved = await readPlaylistCoalesced(uri);
+      setSavedPlaylistEntry(saved);
+    } catch (resyncError) {
+      const fallbackMessage = 'Could not restore player state.';
+      setError(resyncError instanceof Error ? resyncError.message : fallbackMessage);
+    }
+  }, [player]);
 
   return {
     activeEpisode,
+    clearNowPlayingIfMatchesEpisode,
     error,
     isLoading,
     playEpisode,
     progress,
+    resyncPlaylistFromDisk,
     seekTo,
     state,
     togglePlayback,

@@ -29,6 +29,8 @@ export interface AudioPlayer {
   play(track: AudioTrack, positionMs?: number): Promise<void>;
   resume(): Promise<void>;
   seekTo(positionMs: number): Promise<void>;
+  /** Clears the current queue (stops playback). */
+  stop(): Promise<void>;
 }
 
 let audioPlayerInstance: AudioPlayer | null = null;
