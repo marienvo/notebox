@@ -98,9 +98,14 @@ describe('usePlayer restore state', () => {
 
     useVaultContextMock.mockReturnValue({
       baseUri: 'content://vault-root',
+      clearInboxContentCache: jest.fn(),
       consumeInboxPrefetch: jest.fn(() => null),
+      getInboxNoteContentFromCache: () => undefined,
       isLoading: false,
+      pruneInboxNoteContentFromCache: jest.fn(),
       refreshSession: jest.fn(async () => undefined),
+      replaceInboxContentFromSession: jest.fn(),
+      setInboxNoteContentInCache: jest.fn(),
       settings: null,
       setSessionUri: jest.fn(async () => undefined),
       setSettings: jest.fn(),

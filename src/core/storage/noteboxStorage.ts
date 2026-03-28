@@ -8,6 +8,7 @@ import {
 } from 'react-native-saf-x';
 
 import {tryListMarkdownFilesNative} from './androidVaultListing';
+import {normalizeNoteUri} from './noteUriNormalize';
 import {DEV_MOCK_VAULT_URI} from '../../dev/mockVaultData';
 import {
   NoteDetail,
@@ -78,15 +79,7 @@ function normalizeBaseUri(baseUri: string): string {
   return normalizedUri;
 }
 
-function normalizeNoteUri(noteUri: string): string {
-  const normalizedUri = noteUri.trim();
-
-  if (!normalizedUri) {
-    throw new Error('Note URI cannot be empty.');
-  }
-
-  return normalizedUri;
-}
+export {normalizeNoteUri} from './noteUriNormalize';
 
 function serializeSettings(settings: NoteboxSettings): string {
   return `${JSON.stringify(settings, null, 2)}\n`;

@@ -7,11 +7,21 @@ import {Pressable, StyleSheet} from 'react-native';
 import Markdown from 'react-native-markdown-display';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
+import {normalizeNoteUri} from '../../../core/storage/noteUriNormalize';
+import {useVaultContext} from '../../../core/vault/VaultContext';
 import {isNavigateToAddNoteAction} from '../../../navigation/navigationActionGuards';
 import {VaultStackParamList} from '../../../navigation/types';
 import {useNotes} from '../hooks/useNotes';
 
 type NoteDetailScreenProps = StackScreenProps<VaultStackParamList, 'NoteDetail'>;
+
+function noteFileNameFromRoute(route: NoteDetailScreenProps['route']): string {
+  if (route.params.noteFileName?.trim()) {
+    return route.params.noteFileName.trim();
+  }
+  const tail = normalizeNoteUri(route.params.noteUri).split('/').filter(Boolean).pop();
+  return tail ?? 'Note';
+}
 
 type NoteDetailEditHeaderButtonProps = {
   onPress: () => void;
@@ -49,11 +59,19 @@ function createNoteDetailHeaderRight(
 
 export function NoteDetailScreen({navigation, route}: NoteDetailScreenProps) {
   const {read} = useNotes();
+  const {getInboxNoteContentFromCache} = useVaultContext();
   const colorMode = useColorMode();
-  const [content, setContent] = useState('');
+  const headerFileName = noteFileNameFromRoute(route);
+  const [content, setContent] = useState(
+    () => getInboxNoteContentFromCache(route.params.noteUri) ?? '',
+  );
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const hasLoadedNoteOnceRef = useRef(false);
+  const [isLoading, setIsLoading] = useState(
+    () => getInboxNoteContentFromCache(route.params.noteUri) === undefined,
+  );
+  const hasLoadedNoteOnceRef = useRef(
+    getInboxNoteContentFromCache(route.params.noteUri) !== undefined,
+  );
   const markdownTextColor = colorMode === 'dark' ? '#f5f5f5' : '#212121';
   const markdownMutedColor = colorMode === 'dark' ? '#cfcfcf' : '#616161';
 
@@ -72,9 +90,9 @@ export function NoteDetailScreen({navigation, route}: NoteDetailScreenProps) {
         route.params.noteUri,
       ),
       headerShown: true,
-      title: route.params.noteTitle,
+      title: headerFileName,
     });
-  }, [navigation, route.params.noteTitle, route.params.noteUri]);
+  }, [navigation, headerFileName, route.params.noteTitle, route.params.noteUri]);
 
   useEffect(() => {
     const tabNavigation = navigation.getParent();
@@ -104,7 +122,7 @@ export function NoteDetailScreen({navigation, route}: NoteDetailScreenProps) {
           route.params.noteUri,
         ),
         headerShown: true,
-        title: route.params.noteTitle,
+        title: headerFileName,
       });
     };
 
@@ -145,7 +163,7 @@ export function NoteDetailScreen({navigation, route}: NoteDetailScreenProps) {
       hideNoteStackHeader();
       showVaultTabHeader();
     };
-  }, [navigation, route.params.noteTitle, route.params.noteUri]);
+  }, [navigation, headerFileName, route.params.noteTitle, route.params.noteUri]);
 
   useFocusEffect(
     useCallback(() => {
@@ -154,8 +172,18 @@ export function NoteDetailScreen({navigation, route}: NoteDetailScreenProps) {
   );
 
   useEffect(() => {
-    hasLoadedNoteOnceRef.current = false;
-  }, [route.params.noteUri]);
+    const cached = getInboxNoteContentFromCache(route.params.noteUri);
+    if (cached !== undefined) {
+      setContent(cached);
+      setIsLoading(false);
+      hasLoadedNoteOnceRef.current = true;
+    } else {
+      setContent('');
+      setIsLoading(true);
+      hasLoadedNoteOnceRef.current = false;
+    }
+    setError(null);
+  }, [getInboxNoteContentFromCache, route.params.noteUri]);
 
   useFocusEffect(
     useCallback(() => {

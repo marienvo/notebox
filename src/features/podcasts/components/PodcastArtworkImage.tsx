@@ -5,12 +5,14 @@ import {usePodcastArtworkDisplayUri} from '../hooks/usePodcastArtworkDisplayUri'
 
 type PodcastArtworkImageProps = {
   artworkUri: string | null;
+  blurRadius?: number;
   imageStyle: StyleProp<ImageStyle>;
   placeholderStyle: StyleProp<ViewStyle>;
 };
 
 export function PodcastArtworkImage({
   artworkUri,
+  blurRadius = 0,
   imageStyle,
   placeholderStyle,
 }: PodcastArtworkImageProps) {
@@ -25,6 +27,6 @@ export function PodcastArtworkImage({
   }
 
   return (
-    <Image source={{uri: displayUri}} style={imageStyle} />
+    <Image blurRadius={blurRadius} source={{uri: displayUri}} style={imageStyle} />
   );
 }

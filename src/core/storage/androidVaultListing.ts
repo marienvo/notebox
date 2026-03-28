@@ -2,6 +2,7 @@ import {NativeModules, Platform} from 'react-native';
 
 import {DEV_MOCK_VAULT_URI} from '../../dev/mockVaultData';
 import {NoteSummary} from '../../types';
+import {normalizeNoteUri} from './noteUriNormalize';
 
 type NativeVaultListingModule = {
   listMarkdownFiles: (
@@ -12,7 +13,12 @@ type NativeVaultListingModule = {
   ) => Promise<
     | string
     | {
-        inboxNotes?: Array<{lastModified?: number | null; name: string; uri: string}>;
+        inboxNotes?: Array<{
+          content?: string;
+          lastModified?: number | null;
+          name: string;
+          uri: string;
+        }>;
         settings: string;
       }
   >;
@@ -25,6 +31,7 @@ export type MarkdownFileRow = {
 };
 
 export type PreparedNoteboxSessionNative = {
+  inboxContentByUri: Record<string, string> | null;
   inboxPrefetch: NoteSummary[] | null;
   settingsJson: string;
 };
@@ -97,7 +104,7 @@ export async function tryPrepareNoteboxSessionNative(
   try {
     const raw = await mod.prepareNoteboxSession(baseUri);
     if (typeof raw === 'string') {
-      return {settingsJson: raw, inboxPrefetch: null};
+      return {inboxContentByUri: null, settingsJson: raw, inboxPrefetch: null};
     }
     if (
       raw == null ||
@@ -107,14 +114,30 @@ export async function tryPrepareNoteboxSessionNative(
       return null;
     }
     const structured = raw as {
-      inboxNotes?: Array<{lastModified?: number | null; name: string; uri: string}>;
+      inboxNotes?: Array<{
+        content?: string;
+        lastModified?: number | null;
+        name: string;
+        uri: string;
+      }>;
       settings: string;
     };
     const inboxNotes = structured.inboxNotes;
     const inboxPrefetch = Array.isArray(inboxNotes)
       ? inboxNotes.map(mapNativeInboxRow)
       : null;
+    let inboxContentByUri: Record<string, string> | null = null;
+    if (Array.isArray(inboxNotes)) {
+      const byUri: Record<string, string> = {};
+      for (const row of inboxNotes) {
+        if (typeof row.content === 'string') {
+          byUri[normalizeNoteUri(row.uri)] = row.content;
+        }
+      }
+      inboxContentByUri = Object.keys(byUri).length > 0 ? byUri : null;
+    }
     return {
+      inboxContentByUri,
       settingsJson: structured.settings,
       inboxPrefetch,
     };

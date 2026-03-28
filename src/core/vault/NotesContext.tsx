@@ -9,6 +9,7 @@ import {
 } from 'react';
 import {InteractionManager} from 'react-native';
 
+import {tryPrepareNoteboxSessionNative} from '../storage/androidVaultListing';
 import {
   createNote,
   deleteInboxNotes,
@@ -16,6 +17,7 @@ import {
   readNote,
   writeNoteContent,
 } from '../storage/noteboxStorage';
+import {normalizeNoteUri} from '../storage/noteUriNormalize';
 import {NoteDetail, NoteSummary} from '../../types';
 import {useVaultContext} from './VaultContext';
 
@@ -79,7 +81,15 @@ type NotesProviderProps = {
 };
 
 export function NotesProvider({children}: NotesProviderProps) {
-  const {baseUri, consumeInboxPrefetch} = useVaultContext();
+  const {
+    baseUri,
+    clearInboxContentCache,
+    consumeInboxPrefetch,
+    getInboxNoteContentFromCache,
+    pruneInboxNoteContentFromCache,
+    replaceInboxContentFromSession,
+    setInboxNoteContentInCache,
+  } = useVaultContext();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [notes, setNotes] = useState<NoteSummary[]>([]);
@@ -102,6 +112,15 @@ export function NotesProvider({children}: NotesProviderProps) {
           setNotes(prefetched);
           return;
         }
+
+        const prepared = await tryPrepareNoteboxSessionNative(baseUri);
+        if (prepared !== null && prepared.inboxPrefetch !== null) {
+          setNotes(prepared.inboxPrefetch);
+          replaceInboxContentFromSession(prepared.inboxContentByUri);
+          return;
+        }
+
+        clearInboxContentCache();
         const nextNotes = await listInboxNotesAndSyncIndex(baseUri);
         setNotes(nextNotes);
       } catch (loadError) {
@@ -113,7 +132,7 @@ export function NotesProvider({children}: NotesProviderProps) {
         }
       }
     },
-    [baseUri, consumeInboxPrefetch],
+    [baseUri, clearInboxContentCache, consumeInboxPrefetch, replaceInboxContentFromSession],
   );
 
   useEffect(() => {
@@ -142,9 +161,25 @@ export function NotesProvider({children}: NotesProviderProps) {
     [baseUri, notes, refresh],
   );
 
-  const read = useCallback(async (noteUri: string): Promise<NoteDetail> => {
-    return readNote(noteUri);
-  }, []);
+  const read = useCallback(
+    async (noteUri: string): Promise<NoteDetail> => {
+      const cached = getInboxNoteContentFromCache(noteUri);
+      if (cached !== undefined) {
+        const normalizedNoteUri = normalizeNoteUri(noteUri);
+        const nameFromUri = normalizedNoteUri.split('/').pop() ?? 'Untitled.md';
+        return {
+          content: cached,
+          summary: {
+            lastModified: null,
+            name: nameFromUri,
+            uri: normalizedNoteUri,
+          },
+        };
+      }
+      return readNote(noteUri);
+    },
+    [getInboxNoteContentFromCache],
+  );
 
   const deleteNotes = useCallback(
     async (noteUris: string[]) => {
@@ -172,6 +207,7 @@ export function NotesProvider({children}: NotesProviderProps) {
       );
 
       await deleteInboxNotes(baseUri, canonicalDeleteUris);
+      pruneInboxNoteContentFromCache(canonicalDeleteUris);
       const removedUris = new Set(canonicalNotes.map(note => note.uri));
       setNotes(previousNotes =>
         previousNotes.filter(note => !removedUris.has(note.uri)),
@@ -180,15 +216,16 @@ export function NotesProvider({children}: NotesProviderProps) {
         refresh({silent: true}).catch(() => undefined);
       });
     },
-    [baseUri, notes, refresh],
+    [baseUri, notes, pruneInboxNoteContentFromCache, refresh],
   );
 
   const write = useCallback(
     async (noteUri: string, content: string) => {
       await writeNoteContent(noteUri, content);
+      setInboxNoteContentInCache(noteUri, content);
       await refresh();
     },
-    [refresh],
+    [refresh, setInboxNoteContentInCache],
   );
 
   const value = useMemo(
