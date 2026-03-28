@@ -12,7 +12,9 @@ import Animated, {
 
 import {ACCENT_COLOR} from './accentColor';
 import {
+  computeStartupBarDisplayGain,
   computeStartupSpectrumSample,
+  MIDDLE_STARTUP_BARS_FULL,
   smoothSpectrumLevelsInPlace,
   STARTUP_SPECTRUM_SPATIAL_SMOOTH,
 } from './startupSplashSpectrum';
@@ -23,9 +25,12 @@ const MAX_BAR_H = 182;
 const BAR_SPLIT = Math.ceil(BAR_COUNT / 2);
 /** Spectrum cluster width versus full splash width (used to derive bar pixel widths). */
 const SPECTRUM_WIDTH_FRAC = 0.6;
-const PILL_RADIUS = 9999;
 
 const BAR_INDICES = Array.from({length: BAR_COUNT}, (_, i) => i);
+
+const STARTUP_BAR_DISPLAY_GAINS = Array.from({length: BAR_COUNT}, (_, i) =>
+  computeStartupBarDisplayGain(i, BAR_COUNT, MIDDLE_STARTUP_BARS_FULL),
+);
 
 type SpectrumPack = {
   levels: number[];
@@ -60,6 +65,7 @@ function makeEmptySpectrum(): SpectrumPack {
 
 type ColumnProps = {
   barWidthPx: number;
+  displayGain: number;
   index: number;
   isDarkMode: boolean;
   minBarH: number;
@@ -69,6 +75,7 @@ type ColumnProps = {
 
 const WaveColumn = memo(function WaveColumn({
   barWidthPx,
+  displayGain,
   index,
   isDarkMode,
   minBarH,
@@ -81,28 +88,34 @@ const WaveColumn = memo(function WaveColumn({
 
   const barStyle = useAnimatedStyle(() => {
     const {levels} = spectrumSV.value;
-    const lv = levels[index] ?? 0;
+    const lv = (levels[index] ?? 0) * displayGain;
     const mn = minBarH;
     const h = mn + lv * (MAX_BAR_H - mn);
     const span = innerRadiusBand;
     const u = span > 1e-6 ? (h - mn) / span : 1;
     const cl = Math.min(1, Math.max(0, u));
-    const innerR = halfBar * (1 - cl);
+    const hMaxR = h * 0.5;
+    const outerR = Math.min(halfBar, hMaxR);
+    const innerR = Math.min(halfBar * (1 - cl), hMaxR);
     if (placement === 'up') {
       return {
         borderBottomLeftRadius: innerR,
         borderBottomRightRadius: innerR,
+        borderTopLeftRadius: outerR,
+        borderTopRightRadius: outerR,
         height: h,
         opacity: 1,
       };
     }
     return {
+      borderBottomLeftRadius: outerR,
+      borderBottomRightRadius: outerR,
       borderTopLeftRadius: innerR,
       borderTopRightRadius: innerR,
       height: h,
       opacity: 1,
     };
-  }, [halfBar, index, innerRadiusBand, minBarH, placement]);
+  }, [displayGain, halfBar, index, innerRadiusBand, minBarH, placement]);
 
   const barColor =
     isDarkMode && index < BAR_SPLIT ? '#FFFFFF' : ACCENT_COLOR;
@@ -119,12 +132,7 @@ const WaveColumn = memo(function WaveColumn({
           placement === 'up' ? styles.barTrackUp : styles.barTrackDown
         }>
         <Animated.View
-          style={[
-            styles.bar,
-            placement === 'up' ? styles.barCapUp : styles.barCapDown,
-            {backgroundColor: barColor},
-            barStyle,
-          ]}
+          style={[styles.bar, {backgroundColor: barColor}, barStyle]}
         />
       </View>
     </View>
@@ -202,6 +210,7 @@ export function StartupSplashContent({isDarkMode}: Props) {
       <WaveColumn
         key={`${keyPrefix}-${i}`}
         barWidthPx={barWidthPx}
+        displayGain={STARTUP_BAR_DISPLAY_GAINS[i] ?? 1}
         index={i}
         isDarkMode={isDarkMode}
         minBarH={minBarH}
@@ -287,17 +296,5 @@ const styles = StyleSheet.create({
   bar: {
     alignSelf: 'stretch',
     width: '100%',
-  },
-  barCapUp: {
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    borderTopLeftRadius: PILL_RADIUS,
-    borderTopRightRadius: PILL_RADIUS,
-  },
-  barCapDown: {
-    borderBottomLeftRadius: PILL_RADIUS,
-    borderBottomRightRadius: PILL_RADIUS,
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
   },
 });

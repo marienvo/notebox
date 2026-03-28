@@ -1,6 +1,8 @@
 import {
+  computeStartupBarDisplayGain,
   computeStartupSpectrumSample,
   logoSpatialEnvelope,
+  MIDDLE_STARTUP_BARS_FULL,
   smoothSpectrumLevelsInPlace,
 } from '../src/core/ui/startupSplashSpectrum';
 
@@ -136,5 +138,43 @@ describe('startupSplashSpectrum', () => {
     expect(levels[0]).toBeCloseTo(0.25, 5);
     expect(levels[1]).toBeCloseTo(0.5, 5);
     expect(levels[2]).toBeCloseTo(0.5, 5);
+  });
+
+  describe('computeStartupBarDisplayGain', () => {
+    const n = 20;
+
+    it('freezes outer bars and gives full gain to the middle six', () => {
+      expect(computeStartupBarDisplayGain(0, n, MIDDLE_STARTUP_BARS_FULL)).toBe(0);
+      expect(computeStartupBarDisplayGain(19, n, MIDDLE_STARTUP_BARS_FULL)).toBe(0);
+      for (let i = 7; i <= 12; i++) {
+        expect(computeStartupBarDisplayGain(i, n, MIDDLE_STARTUP_BARS_FULL)).toBe(1);
+      }
+    });
+
+    it('ramps strictly between outer and middle (transition bins)', () => {
+      const g6 = computeStartupBarDisplayGain(6, n, MIDDLE_STARTUP_BARS_FULL);
+      const g13 = computeStartupBarDisplayGain(13, n, MIDDLE_STARTUP_BARS_FULL);
+      expect(g6).toBeGreaterThan(0);
+      expect(g6).toBeLessThan(1);
+      expect(g13).toBeGreaterThan(0);
+      expect(g13).toBeLessThan(1);
+    });
+
+    it('ramps monotonically toward the center from each edge', () => {
+      const left: number[] = [];
+      for (let i = 0; i <= 6; i++) {
+        left.push(computeStartupBarDisplayGain(i, n, MIDDLE_STARTUP_BARS_FULL));
+      }
+      for (let k = 1; k < left.length; k++) {
+        expect(left[k]).toBeGreaterThanOrEqual(left[k - 1]!);
+      }
+      const right: number[] = [];
+      for (let i = 19; i >= 13; i--) {
+        right.push(computeStartupBarDisplayGain(i, n, MIDDLE_STARTUP_BARS_FULL));
+      }
+      for (let k = 1; k < right.length; k++) {
+        expect(right[k]).toBeGreaterThanOrEqual(right[k - 1]!);
+      }
+    });
   });
 });

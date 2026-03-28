@@ -52,6 +52,46 @@ function smoothstep01(x: number): number {
   return t * t * (3 - 2 * t);
 }
 
+/** Centered bar count on the startup splash that keeps full motion amplitude. */
+export const MIDDLE_STARTUP_BARS_FULL = 6;
+
+/**
+ * Per-bar gain in [0, 1] for scaling spectrum levels at display time: outer bars fixed at min
+ * height, middle band full swing, smoothstep ramps in between (same math in UI and tests).
+ */
+export function computeStartupBarDisplayGain(
+  index: number,
+  barCount: number,
+  middleFullCount: number = MIDDLE_STARTUP_BARS_FULL,
+): number {
+  'worklet';
+  if (
+    barCount < 2 ||
+    middleFullCount < 1 ||
+    middleFullCount > barCount ||
+    index < 0 ||
+    index >= barCount
+  ) {
+    return 1;
+  }
+  const firstMiddle = Math.floor((barCount - middleFullCount) / 2);
+  const lastMiddle = firstMiddle + middleFullCount - 1;
+  if (index < firstMiddle) {
+    if (firstMiddle <= 0) {
+      return 1;
+    }
+    return smoothstep01(index / firstMiddle);
+  }
+  if (index > lastMiddle) {
+    const denom = barCount - 1 - lastMiddle;
+    if (denom <= 0) {
+      return 1;
+    }
+    return smoothstep01((barCount - 1 - index) / denom);
+  }
+  return 1;
+}
+
 function gaussianLobe(m: number, center: number, width: number): number {
   'worklet';
   const d = (m - center) / width;
