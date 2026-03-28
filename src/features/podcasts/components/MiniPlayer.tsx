@@ -20,7 +20,7 @@ const PLAY_ICON_SIZE = 52;
  * update if container padding, artwork row, or progress block changes.
  */
 export const MINI_PLAYER_LAYOUT_HEIGHT =
-  1 + 20 + 64 + 8 + 40 + 6 + 52 + 20;
+  1 + 20 + 64 + 8 + 40 + 6 + 52;// + 20;
 
 const MS_PER_SECOND = 1000;
 
