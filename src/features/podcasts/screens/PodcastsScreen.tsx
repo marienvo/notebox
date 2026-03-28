@@ -3,6 +3,8 @@ import {StackScreenProps} from '@react-navigation/stack';
 import {useFocusEffect} from '@react-navigation/native';
 import {useCallback, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {
+  Platform,
+  RefreshControl,
   SectionList,
   StyleSheet,
   Text as RNText,
@@ -79,6 +81,7 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
     podcastsLoading,
     refreshPodcasts,
     sections,
+    setPodcastsVaultRefreshUi,
   } = usePlayerContext();
   const [markError, setMarkError] = useState<string | null>(null);
   const [pullRefreshInProgress, setPullRefreshInProgress] = useState(false);
@@ -105,8 +108,16 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
     }
     setRefreshPullError(null);
     setPullRefreshInProgress(true);
+    setPodcastsVaultRefreshUi({visible: true, percent: null});
     try {
-      await runSerializedPodcastVaultRefresh(baseUri, refreshPodcasts);
+      await runSerializedPodcastVaultRefresh(baseUri, refreshPodcasts, {
+        onProgress: payload => {
+          const n = payload.percent;
+          if (typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 100) {
+            setPodcastsVaultRefreshUi({percent: n});
+          }
+        },
+      });
     } catch (refreshError) {
       const message =
         refreshError instanceof Error ? refreshError.message : 'Could not refresh podcasts.';
@@ -115,9 +126,10 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
         console.warn('[Podcasts] pull refresh failed', refreshError);
       }
     } finally {
+      setPodcastsVaultRefreshUi({visible: false});
       setPullRefreshInProgress(false);
     }
-  }, [baseUri, refreshPodcasts]);
+  }, [baseUri, refreshPodcasts, setPodcastsVaultRefreshUi]);
 
   const isPodcastsTopRoute = useCallback((): boolean => {
     const state = navigation.getState();
@@ -301,19 +313,23 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
       {podcastsLoading && sections.length === 0 ? (
         <Spinner style={styles.spinner} />
       ) : null}
-      {pullRefreshInProgress && sections.length === 0 && !podcastsLoading ? (
-        <Spinner style={styles.spinner} />
-      ) : null}
       {podcastError ? <Text style={styles.status}>{podcastError}</Text> : null}
       {playbackError ? <Text style={styles.status}>{playbackError}</Text> : null}
       {markError ? <Text style={styles.status}>{markError}</Text> : null}
       {refreshPullError ? <Text style={styles.status}>{refreshPullError}</Text> : null}
       <SectionList
         contentContainerStyle={styles.listContent}
-        onRefresh={() => {
-          handlePodcastsPullRefresh().catch(() => undefined);
-        }}
-        refreshing={pullRefreshInProgress || podcastsLoading}
+        refreshControl={
+          <RefreshControl
+            colors={Platform.OS === 'android' ? ['transparent'] : undefined}
+            onRefresh={() => {
+              handlePodcastsPullRefresh().catch(() => undefined);
+            }}
+            progressBackgroundColor={Platform.OS === 'android' ? '#00000000' : undefined}
+            refreshing={pullRefreshInProgress || podcastsLoading}
+            tintColor={Platform.OS === 'ios' ? 'transparent' : undefined}
+          />
+        }
         sections={sectionData}
         keyExtractor={item => item.id}
         renderItem={({index, item, section}) => {
