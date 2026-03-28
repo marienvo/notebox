@@ -74,17 +74,17 @@ function VaultRefreshStrip({percent, visible}: VaultRefreshStripProps) {
     };
   });
 
-  if (!visible) {
-    return null;
-  }
-
   return (
-    <View style={styles.stripTrack} onLayout={onTrackLayout}>
-      {determinate ? (
-        <View style={[styles.determinateFill, {width: `${percent}%`}]} />
-      ) : (
-        <Animated.View style={[styles.indeterminateSegment, indeterminateStyle]} />
-      )}
+    <View
+      style={[styles.stripSlot, visible ? styles.stripSlotActive : styles.stripSlotIdle]}
+      onLayout={onTrackLayout}>
+      {visible ? (
+        determinate ? (
+          <View style={[styles.determinateFill, {width: `${percent}%`}]} />
+        ) : (
+          <Animated.View style={[styles.indeterminateSegment, indeterminateStyle]} />
+        )
+      ) : null}
     </View>
   );
 }
@@ -93,9 +93,8 @@ const styles = StyleSheet.create({
   wrapper: {
     backgroundColor: '#1d1d1d',
   },
-  stripTrack: {
-    backgroundColor: 'rgba(79, 175, 230, 0.12)',
-    borderBottomColor: 'rgba(79, 175, 230, 0.35)',
+  /** Fixed slot so header height does not jump when refresh starts or ends. */
+  stripSlot: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     height: STRIP_HEIGHT,
     overflow: 'hidden',
@@ -104,6 +103,14 @@ const styles = StyleSheet.create({
       android: {elevation: 0},
       default: {},
     }),
+  },
+  stripSlotIdle: {
+    backgroundColor: 'transparent',
+    borderBottomColor: 'transparent',
+  },
+  stripSlotActive: {
+    backgroundColor: 'rgba(79, 175, 230, 0.12)',
+    borderBottomColor: 'rgba(79, 175, 230, 0.35)',
   },
   determinateFill: {
     backgroundColor: ACCENT,
