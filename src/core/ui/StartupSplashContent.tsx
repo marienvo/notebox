@@ -1,5 +1,5 @@
-import {memo, useEffect} from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import {memo, useEffect, useMemo} from 'react';
+import {StyleSheet, useWindowDimensions, View} from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -17,89 +17,112 @@ import {
   STARTUP_SPECTRUM_SPATIAL_SMOOTH,
 } from './startupSplashSpectrum';
 
-/** Startup spectrum: speech-like formants, phrase gaps, Winamp peak-hold + decay (frame callback). */
-const BAR_COUNT = 30;
-const MAX_BAR_H = 152;
-const MIN_BAR_H = 6;
-const TICK_HEIGHT = 6;
-const TICK_GAP = 2;
-const MIRROR_OPACITY = 0.28;
-/** Normalized units/sec; higher = peaks track rapid syllable changes more closely. */
-const PEAK_FALL_SPEED = 1.35;
-/** Bar uses this fraction of each column slot; equal margin on both sides gives gap == bar width. */
-const BAR_WIDTH_FRACTION = 0.5;
+/** Startup spectrum: speech-like formants, phrase gaps (frame callback). */
+const BAR_COUNT = 20;
+const MAX_BAR_H = 182;
+const BAR_SPLIT = Math.ceil(BAR_COUNT / 2);
+/** Spectrum cluster width versus full splash width (used to derive bar pixel widths). */
+const SPECTRUM_WIDTH_FRAC = 0.6;
+const PILL_RADIUS = 9999;
 
 const BAR_INDICES = Array.from({length: BAR_COUNT}, (_, i) => i);
 
 type SpectrumPack = {
   levels: number[];
-  peaks: number[];
 };
 
 type Props = {
   isDarkMode: boolean;
 };
 
+type BarPlacement = 'up' | 'down';
+
+function computeBarLayout(windowWidth: number): {
+  barGapPx: number;
+  barWidthPx: number;
+  minBarH: number;
+} {
+  const clusterPx = windowWidth * SPECTRUM_WIDTH_FRAC;
+  const colPx = clusterPx / BAR_COUNT;
+  /** Column model: bar = 2/3 of column; gap between bar faces = 1/3 column = bar/2. */
+  const barWidthPx = Math.max(4, Math.round((colPx * 2) / 3));
+  const barGapPx = Math.max(2, Math.round(barWidthPx / 2));
+  const minBarH =
+    barWidthPx >= MAX_BAR_H ? MAX_BAR_H - 6 : barWidthPx;
+  return {barGapPx, barWidthPx, minBarH};
+}
+
 function makeEmptySpectrum(): SpectrumPack {
   return {
     levels: Array.from({length: BAR_COUNT}, () => 0),
-    peaks: Array.from({length: BAR_COUNT}, () => 0),
   };
 }
 
-function centerMaskMultiplier(index: number, n: number): number {
-  'worklet';
-  if (n <= 1) {
-    return 0.36;
-  }
-  const norm = index / (n - 1);
-  const distFromCenter = Math.abs(norm - 0.5) * 2;
-  return 0.3 + 0.7 * Math.pow(distFromCenter, 1.38);
-}
-
 type ColumnProps = {
+  barWidthPx: number;
   index: number;
   isDarkMode: boolean;
+  minBarH: number;
+  placement: BarPlacement;
   spectrumSV: SharedValue<SpectrumPack>;
 };
 
-const WaveColumn = memo(function WaveColumn({index, isDarkMode, spectrumSV}: ColumnProps) {
+const WaveColumn = memo(function WaveColumn({
+  barWidthPx,
+  index,
+  isDarkMode,
+  minBarH,
+  placement,
+  spectrumSV,
+}: ColumnProps) {
+  const halfBar = barWidthPx * 0.5;
+  /** Rounds the mirror-facing edge only near min so overlap hides square corners, not pill caps at full height. */
+  const innerRadiusBand = halfBar * 2.5;
+
   const barStyle = useAnimatedStyle(() => {
     const {levels} = spectrumSV.value;
     const lv = levels[index] ?? 0;
-    const h = MIN_BAR_H + lv * (MAX_BAR_H - MIN_BAR_H);
-    const mask = centerMaskMultiplier(index, BAR_COUNT);
-    const baseOpacity = isDarkMode ? 0.55 : 0.42;
+    const mn = minBarH;
+    const h = mn + lv * (MAX_BAR_H - mn);
+    const span = innerRadiusBand;
+    const u = span > 1e-6 ? (h - mn) / span : 1;
+    const cl = Math.min(1, Math.max(0, u));
+    const innerR = halfBar * (1 - cl);
+    if (placement === 'up') {
+      return {
+        borderBottomLeftRadius: innerR,
+        borderBottomRightRadius: innerR,
+        height: h,
+        opacity: 1,
+      };
+    }
     return {
+      borderTopLeftRadius: innerR,
+      borderTopRightRadius: innerR,
       height: h,
-      opacity: baseOpacity * mask,
+      opacity: 1,
     };
-  }, [index, isDarkMode]);
+  }, [halfBar, index, innerRadiusBand, minBarH, placement]);
 
-  const tickStyle = useAnimatedStyle(() => {
-    const {levels, peaks} = spectrumSV.value;
-    const lv = levels[index] ?? 0;
-    const pk = peaks[index] ?? 0;
-    const hPeak = MIN_BAR_H + pk * (MAX_BAR_H - MIN_BAR_H);
-    const mask = centerMaskMultiplier(index, BAR_COUNT);
-    const accentBoost = pk > lv + 0.006 ? 1 : 0.9;
-    return {
-      bottom: hPeak + TICK_GAP,
-      opacity: Math.min(
-        1,
-        Math.max(0.58 * mask, (0.68 + 0.32 * pk) * mask * accentBoost),
-      ),
-    };
-  }, [index]);
+  const barColor =
+    isDarkMode && index < BAR_SPLIT ? '#FFFFFF' : ACCENT_COLOR;
+
+  const columnStyle = [
+    placement === 'up' ? styles.columnUp : styles.columnDown,
+    {width: barWidthPx},
+  ];
 
   return (
-    <View style={styles.column}>
-      <View style={styles.barTrack}>
-        <Animated.View style={[styles.tick, tickStyle]} />
+    <View style={columnStyle}>
+      <View
+        style={
+          placement === 'up' ? styles.barTrackUp : styles.barTrackDown
+        }>
         <Animated.View
           style={[
             styles.bar,
-            isDarkMode ? styles.barFillDark : styles.barFillLight,
+            placement === 'up' ? styles.barCapUp : styles.barCapDown,
+            {backgroundColor: barColor},
             barStyle,
           ]}
         />
@@ -110,6 +133,11 @@ const WaveColumn = memo(function WaveColumn({index, isDarkMode, spectrumSV}: Col
 
 export function StartupSplashContent({isDarkMode}: Props) {
   const reducedMotion = useReducedMotion();
+  const {width: windowWidth} = useWindowDimensions();
+  const {barGapPx, barWidthPx, minBarH} = useMemo(
+    () => computeBarLayout(windowWidth),
+    [windowWidth],
+  );
 
   const spectrumSV = useSharedValue<SpectrumPack>(makeEmptySpectrum());
   const reducedMotionSV = useSharedValue(reducedMotion ? 1 : 0);
@@ -119,35 +147,29 @@ export function StartupSplashContent({isDarkMode}: Props) {
     'worklet';
     const tSec = frameInfo.timeSinceFirstFrame / 1000;
     const rm = reducedMotionSV.value === 1;
-    const dt =
-      frameInfo.timeSincePreviousFrame === null
-        ? 16 / 1000
-        : frameInfo.timeSincePreviousFrame / 1000;
 
     const prev = spectrumSV.value;
+    const raw: number[] = new Array(BAR_COUNT);
+    for (let i = 0; i < BAR_COUNT; i++) {
+      raw[i] = computeStartupSpectrumSample(tSec, i, BAR_COUNT, rm);
+    }
+
     const levels: number[] = new Array(BAR_COUNT);
-    const peaks: number[] = new Array(BAR_COUNT);
-
-    for (let i = 0; i < BAR_COUNT; i++) {
-      levels[i] = computeStartupSpectrumSample(tSec, i, BAR_COUNT, rm);
-    }
     if (!rm) {
-      smoothSpectrumLevelsInPlace(levels, STARTUP_SPECTRUM_SPATIAL_SMOOTH);
-    }
-    for (let i = 0; i < BAR_COUNT; i++) {
-      const level = levels[i] ?? 0;
-      let pk = prev.peaks[i] ?? 0;
-      if (rm) {
-        pk = level;
-      } else if (level >= pk) {
-        pk = level;
-      } else {
-        pk = Math.max(level, pk - PEAK_FALL_SPEED * dt);
+      const work = raw.slice();
+      smoothSpectrumLevelsInPlace(work, STARTUP_SPECTRUM_SPATIAL_SMOOTH);
+      const prevLv = prev.levels;
+      for (let i = 0; i < BAR_COUNT; i++) {
+        const r = raw[i] ?? 0;
+        levels[i] = r >= (prevLv[i] ?? 0) ? r : (work[i] ?? 0);
       }
-      peaks[i] = pk;
+    } else {
+      for (let i = 0; i < BAR_COUNT; i++) {
+        levels[i] = raw[i] ?? 0;
+      }
     }
 
-    spectrumSV.value = {levels, peaks};
+    spectrumSV.value = {levels};
   }, false);
 
   useEffect(() => {
@@ -161,7 +183,7 @@ export function StartupSplashContent({isDarkMode}: Props) {
 
   useEffect(() => {
     enterOpacity.value = withTiming(1, {
-      duration: 420,
+      duration: 90,
       easing: Easing.out(Easing.cubic),
     });
   }, [enterOpacity]);
@@ -170,28 +192,46 @@ export function StartupSplashContent({isDarkMode}: Props) {
     opacity: enterOpacity.value,
   }));
 
-  const column = (keyPrefix: string) =>
+  const rowStyle = (placement: BarPlacement) => [
+    placement === 'up' ? styles.barsRowUp : styles.barsRowDown,
+    {gap: barGapPx},
+  ];
+
+  const column = (keyPrefix: string, placement: BarPlacement) =>
     BAR_INDICES.map(i => (
       <WaveColumn
         key={`${keyPrefix}-${i}`}
+        barWidthPx={barWidthPx}
         index={i}
         isDarkMode={isDarkMode}
+        minBarH={minBarH}
+        placement={placement}
         spectrumSV={spectrumSV}
       />
     ));
 
+  const halfBar = barWidthPx * 0.5;
+  const waveBlockStyle = [
+    styles.waveBlock,
+    {height: MAX_BAR_H * 2 - barWidthPx},
+  ];
+  const spectrumClusterUpStyle = [
+    styles.spectrumCluster,
+    {marginBottom: -halfBar},
+  ];
+  const spectrumClusterDownStyle = [
+    styles.spectrumCluster,
+    {marginTop: -halfBar},
+  ];
+
   return (
     <Animated.View style={[styles.root, enterStyle]}>
-      <View style={styles.waveBlock}>
-        <View style={styles.barsRow}>{column('t')}</View>
-        <Text
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-          style={[styles.brand, isDarkMode ? styles.brandDark : styles.brandLight]}>
-          Eskerra
-        </Text>
-        <View style={styles.mirrorShell}>
-          <View style={styles.barsRow}>{column('m')}</View>
+      <View style={waveBlockStyle}>
+        <View style={spectrumClusterUpStyle}>
+          <View style={rowStyle('up')}>{column('up', 'up')}</View>
+        </View>
+        <View style={spectrumClusterDownStyle}>
+          <View style={rowStyle('down')}>{column('down', 'down')}</View>
         </View>
       </View>
     </Animated.View>
@@ -204,76 +244,60 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   waveBlock: {
-    height: MAX_BAR_H * 2 + 56,
     justifyContent: 'flex-start',
     position: 'relative',
     width: '100%',
   },
-  barsRow: {
+  spectrumCluster: {
+    alignSelf: 'center',
+    width: `${SPECTRUM_WIDTH_FRAC * 100}%`,
+  },
+  barsRowUp: {
     alignItems: 'flex-end',
     flexDirection: 'row',
-    gap: 0,
     height: MAX_BAR_H,
+    justifyContent: 'center',
     width: '100%',
   },
-  mirrorShell: {
-    opacity: MIRROR_OPACITY,
-    transform: [{scaleY: -1}],
+  barsRowDown: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    height: MAX_BAR_H,
+    justifyContent: 'center',
     width: '100%',
   },
-  column: {
-    flex: 1,
+  columnUp: {
     height: MAX_BAR_H,
     justifyContent: 'flex-end',
-    minWidth: 0,
   },
-  barTrack: {
-    alignSelf: 'center',
+  columnDown: {
+    height: MAX_BAR_H,
+    justifyContent: 'flex-start',
+  },
+  barTrackUp: {
     height: MAX_BAR_H,
     justifyContent: 'flex-end',
-    position: 'relative',
-    width: `${BAR_WIDTH_FRACTION * 100}%`,
+    width: '100%',
+  },
+  barTrackDown: {
+    height: MAX_BAR_H,
+    justifyContent: 'flex-start',
+    width: '100%',
   },
   bar: {
     alignSelf: 'stretch',
-    borderRadius: 0,
     width: '100%',
   },
-  barFillDark: {
-    backgroundColor: '#e8e8e8',
+  barCapUp: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderTopLeftRadius: PILL_RADIUS,
+    borderTopRightRadius: PILL_RADIUS,
   },
-  barFillLight: {
-    backgroundColor: '#252525',
-  },
-  tick: {
-    backgroundColor: ACCENT_COLOR,
-    borderRadius: 0,
-    height: TICK_HEIGHT,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-  },
-  brand: {
-    fontSize: 36,
-    fontWeight: '200',
-    left: 0,
-    letterSpacing: 4,
-    position: 'absolute',
-    right: 0,
-    textAlign: 'center',
-    top: MAX_BAR_H - 22,
-    zIndex: 2,
-  },
-  brandDark: {
-    color: '#f5f5f5',
-    textShadowColor: 'rgba(0,0,0,0.45)',
-    textShadowOffset: {width: 0, height: 1},
-    textShadowRadius: 3,
-  },
-  brandLight: {
-    color: '#1a1a1a',
-    textShadowColor: 'rgba(255,255,255,0.85)',
-    textShadowOffset: {width: 0, height: 1},
-    textShadowRadius: 2,
+  barCapDown: {
+    borderBottomLeftRadius: PILL_RADIUS,
+    borderBottomRightRadius: PILL_RADIUS,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
   },
 });

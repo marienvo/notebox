@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#121212',
   },
   loadingContainerLight: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#FFFFFF',
   },
 });
 

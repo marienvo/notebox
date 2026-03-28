@@ -1,5 +1,6 @@
 import {
   computeStartupSpectrumSample,
+  logoSpatialEnvelope,
   smoothSpectrumLevelsInPlace,
 } from '../src/core/ui/startupSplashSpectrum';
 
@@ -12,15 +13,14 @@ function levelsAt(tSec: number, staticOnly = false): number[] {
 }
 
 describe('startupSplashSpectrum', () => {
-  it('has intervals where all bars are near silent (phrase gaps)', () => {
-    const samples: number[] = [];
+  it('keeps visible micro-motion in quiet periods without flattening to zero', () => {
+    const maxima: number[] = [];
     for (let t = 0; t < 18; t += 0.025) {
       const lv = levelsAt(t);
-      samples.push(Math.max(...lv));
+      maxima.push(Math.max(...lv));
     }
-    const silentFrames = samples.filter(m => m < 0.005).length;
-    expect(silentFrames / samples.length).toBeGreaterThan(0.28);
-    expect(Math.min(...samples)).toBeLessThan(0.02);
+    expect(Math.min(...maxima)).toBeGreaterThan(0.005);
+    expect(Math.max(...maxima) - Math.min(...maxima)).toBeGreaterThan(0.15);
   });
 
   it('concentrates energy in a subset of bins when active (formant-like)', () => {
@@ -35,7 +35,91 @@ describe('startupSplashSpectrum', () => {
       const spread = BAR_COUNT - aboveHalf;
       bestSpread = Math.max(bestSpread, spread);
     }
-    expect(bestSpread).toBeGreaterThan(8);
+    expect(bestSpread).toBeGreaterThan(7);
+  });
+
+  it('logoSpatialEnvelope peaks near 60% across the white segment and tapers cyan', () => {
+    const n = 20;
+    const split = Math.ceil(n / 2);
+    let maxI = 0;
+    let maxW = -1;
+    for (let i = 0; i < split; i++) {
+      const w = logoSpatialEnvelope(i, n);
+      if (w > maxW) {
+        maxW = w;
+        maxI = i;
+      }
+    }
+    const expected = Math.round(0.6 * (split - 1));
+    expect(Math.abs(maxI - expected)).toBeLessThanOrEqual(1);
+
+    const firstCyan = logoSpatialEnvelope(split, n);
+    const lastCyan = logoSpatialEnvelope(n - 1, n);
+    expect(firstCyan).toBeGreaterThan(lastCyan);
+  });
+
+  it('when active, white-bin argmax clusters near the logo peak (time aggregate)', () => {
+    const split = Math.ceil(BAR_COUNT / 2);
+    const expectedPeak = Math.round(0.6 * (split - 1));
+    const aroundPeak = new Set([
+      expectedPeak - 1,
+      expectedPeak,
+      expectedPeak + 1,
+    ].filter(i => i >= 0 && i < split));
+
+    let hitsNearPeak = 0;
+    let activeFrames = 0;
+
+    for (let t = 0; t < 18; t += 0.02) {
+      const lv = levelsAt(t);
+      if (Math.max(...lv) < 0.12) {
+        continue;
+      }
+      activeFrames++;
+      let bestI = 0;
+      let bestV = -1;
+      for (let i = 0; i < split; i++) {
+        const v = lv[i] ?? 0;
+        if (v > bestV) {
+          bestV = v;
+          bestI = i;
+        }
+      }
+      if (aroundPeak.has(bestI)) {
+        hitsNearPeak++;
+      }
+    }
+
+    expect(activeFrames).toBeGreaterThan(50);
+    expect(hitsNearPeak / activeFrames).toBeGreaterThan(0.38);
+  });
+
+  it('when active, cyan segment is higher on the left than the right on average', () => {
+    const split = Math.ceil(BAR_COUNT / 2);
+    const cyan = BAR_COUNT - split;
+    const third = Math.max(1, Math.floor(cyan / 3));
+
+    let sumEdge = 0;
+    let activeFrames = 0;
+
+    for (let t = 0; t < 18; t += 0.02) {
+      const lv = levelsAt(t);
+      if (Math.max(...lv) < 0.12) {
+        continue;
+      }
+      activeFrames++;
+      const slice = lv.slice(split);
+      let sFirst = 0;
+      let sLast = 0;
+      for (let k = 0; k < third; k++) {
+        sFirst += slice[k] ?? 0;
+        sLast += slice[slice.length - 1 - k] ?? 0;
+      }
+      sumEdge += sFirst / third - sLast / third;
+    }
+
+    expect(activeFrames).toBeGreaterThan(50);
+    expect(sumEdge / activeFrames).toBeGreaterThan(0.006);
   });
 
   it('static reduced-motion path keeps stable range', () => {

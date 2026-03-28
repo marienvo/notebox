@@ -40,7 +40,7 @@ const playlistTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}
   <MaterialIcons color={color} name="playlist-play" size={size} />
 );
 const newNoteTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
-  <MaterialIcons color={color} name="add-box" size={size} />
+  <MaterialIcons color={color} name="add" size={size} />
 );
 const inboxTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
   <MaterialIcons color={color} name="notes" size={size} />
