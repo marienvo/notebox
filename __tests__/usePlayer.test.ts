@@ -1,12 +1,13 @@
 import React, {useEffect} from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 
-import {usePlayer} from '../src/features/podcasts/hooks/usePlayer';
 import {
   clearPlaylist,
   readPlaylistCoalesced,
+  writePlaylist,
 } from '../src/core/storage/noteboxStorage';
 import {useVaultContext} from '../src/core/vault/VaultContext';
+import {usePlayer} from '../src/features/podcasts/hooks/usePlayer';
 import {getAudioPlayer} from '../src/features/podcasts/services/audioPlayer';
 import {PodcastEpisode} from '../src/types';
 
@@ -36,11 +37,20 @@ type PlayerHookSnapshot = {
 type HookHarnessProps = {
   episodesById: Map<string, PodcastEpisode>;
   onResult: (result: PlayerHookSnapshot) => void;
+  podcastsCatalogReady?: boolean;
+  podcastsLoading?: boolean;
 };
 
-function HookHarness({episodesById, onResult}: HookHarnessProps) {
+function HookHarness({
+  episodesById,
+  onResult,
+  podcastsCatalogReady = false,
+  podcastsLoading = false,
+}: HookHarnessProps) {
   const result = usePlayer(episodesById, {
     onMarkAsPlayed: async () => undefined,
+    podcastsCatalogReady,
+    podcastsLoading,
   });
 
   useEffect(() => {
@@ -50,6 +60,25 @@ function HookHarness({episodesById, onResult}: HookHarnessProps) {
       state: result.state,
     });
   }, [onResult, result]);
+
+  return null;
+}
+
+type SeekHarnessProps = {
+  episodesById: Map<string, PodcastEpisode>;
+  onSeekTo: (seekTo: (ms: number) => Promise<void>) => void;
+};
+
+function SeekHarness({episodesById, onSeekTo}: SeekHarnessProps) {
+  const result = usePlayer(episodesById, {
+    onMarkAsPlayed: async () => undefined,
+    podcastsCatalogReady: true,
+    podcastsLoading: false,
+  });
+
+  useEffect(() => {
+    onSeekTo(result.seekTo);
+  }, [onSeekTo, result.seekTo]);
 
   return null;
 }
@@ -73,6 +102,7 @@ describe('usePlayer restore state', () => {
     typeof readPlaylistCoalesced
   >;
   const clearPlaylistMock = clearPlaylist as jest.MockedFunction<typeof clearPlaylist>;
+  const writePlaylistMock = writePlaylist as jest.MockedFunction<typeof writePlaylist>;
   const useVaultContextMock = useVaultContext as jest.MockedFunction<
     typeof useVaultContext
   >;
@@ -80,6 +110,7 @@ describe('usePlayer restore state', () => {
     typeof getAudioPlayer
   >;
   let ensureSetupMock: jest.MockedFunction<() => Promise<void>>;
+  let stopMock: jest.MockedFunction<() => Promise<void>>;
 
   const episode: PodcastEpisode = {
     date: '2026-03-20',
@@ -95,6 +126,7 @@ describe('usePlayer restore state', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     ensureSetupMock = jest.fn(async () => undefined);
+    stopMock = jest.fn(async () => undefined);
 
     useVaultContextMock.mockReturnValue({
       baseUri: 'content://vault-root',
@@ -117,12 +149,13 @@ describe('usePlayer restore state', () => {
       addStateListener: jest.fn(() => () => undefined),
       destroy: jest.fn(async () => undefined),
       ensureSetup: ensureSetupMock,
-      getProgress: jest.fn(async () => ({durationMs: null, positionMs: 0})),
+      getProgress: jest.fn(async () => ({durationMs: 120_000, positionMs: 30_000})),
       getState: jest.fn(async () => 'idle'),
       pause: jest.fn(async () => undefined),
       play: jest.fn(async () => undefined),
       resume: jest.fn(async () => undefined),
       seekTo: jest.fn(async () => undefined),
+      stop: stopMock,
     });
   });
 
@@ -149,6 +182,7 @@ describe('usePlayer restore state', () => {
         React.createElement(HookHarness, {
           episodesById,
           onResult: handleResult,
+          podcastsCatalogReady: false,
         }),
       );
       await flushPromises();
@@ -168,6 +202,7 @@ describe('usePlayer restore state', () => {
         React.createElement(HookHarness, {
           episodesById,
           onResult: handleResult,
+          podcastsCatalogReady: true,
         }),
       );
       await flushPromises();
@@ -205,6 +240,7 @@ describe('usePlayer restore state', () => {
         React.createElement(HookHarness, {
           episodesById,
           onResult: handleResult,
+          podcastsCatalogReady: false,
         }),
       );
       await flushPromises();
@@ -216,6 +252,7 @@ describe('usePlayer restore state', () => {
         React.createElement(HookHarness, {
           episodesById,
           onResult: handleResult,
+          podcastsCatalogReady: true,
         }),
       );
       await flushPromises();
@@ -231,6 +268,7 @@ describe('usePlayer restore state', () => {
         React.createElement(HookHarness, {
           episodesById,
           onResult: handleResult,
+          podcastsCatalogReady: true,
         }),
       );
       await flushPromises();
@@ -242,5 +280,71 @@ describe('usePlayer restore state', () => {
     await act(async () => {
       renderer?.unmount();
     });
+  });
+
+  test('clears stale playlist when catalog is ready and episode is missing', async () => {
+    readPlaylistMock.mockResolvedValue({
+      durationMs: 900000,
+      episodeId: 'orphan-id',
+      mp3Url: 'https://example.com/orphan.mp3',
+      positionMs: 1000,
+    });
+
+    let latestResult: PlayerHookSnapshot | null = null;
+    const handleResult = (result: PlayerHookSnapshot) => {
+      latestResult = result;
+    };
+
+    const episodesById = new Map<string, PodcastEpisode>();
+
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(HookHarness, {
+          episodesById,
+          onResult: handleResult,
+          podcastsCatalogReady: true,
+          podcastsLoading: false,
+        }),
+      );
+      await flushPromises();
+    });
+
+    expect(clearPlaylistMock).toHaveBeenCalled();
+    expect(stopMock).toHaveBeenCalled();
+    expect(expectResult(latestResult).activeEpisode).toBeNull();
+  });
+
+  test('seekTo does not persist to playlist.json', async () => {
+    readPlaylistMock.mockResolvedValue({
+      durationMs: 120_000,
+      episodeId: episode.id,
+      mp3Url: episode.mp3Url,
+      positionMs: 0,
+    });
+
+    const episodesById = new Map([[episode.id, episode]]);
+    let seekToRef: ((ms: number) => Promise<void>) | null = null;
+
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(SeekHarness, {
+          episodesById,
+          onSeekTo: fn => {
+            seekToRef = fn;
+          },
+        }),
+      );
+      await flushPromises();
+    });
+
+    if (!seekToRef) {
+      throw new Error('seekTo not wired.');
+    }
+
+    await act(async () => {
+      await seekToRef!(45_000);
+    });
+
+    expect(writePlaylistMock).not.toHaveBeenCalled();
   });
 });

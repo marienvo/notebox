@@ -3,6 +3,7 @@ import {
   ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -22,20 +23,23 @@ export type PodcastsVaultRefreshUiPatch = {
 type PlayerContextValue = {
   activeEpisode: PodcastEpisode | null;
   allEpisodes: PodcastEpisode[];
+  clearMiniPlayerArtworkSelection: () => void;
+  markEpisodeAsPlayed: (episode: PodcastEpisode) => Promise<void>;
+  miniPlayerArtworkSelected: boolean;
+  playEpisode: (episode: PodcastEpisode) => Promise<void>;
   playbackError: string | null;
   playbackLoading: boolean;
   playbackState: PlayerState;
-  markEpisodeAsPlayed: (episode: PodcastEpisode) => Promise<void>;
-  playEpisode: (episode: PodcastEpisode) => Promise<void>;
-  progress: PlayerProgress;
   podcastError: string | null;
   podcastsLoading: boolean;
   podcastsVaultRefreshPercent: number | null;
   podcastsVaultRefreshVisible: boolean;
+  progress: PlayerProgress;
   refreshPodcasts: (options?: RefreshPodcastsOptions) => Promise<void>;
   sections: PodcastSection[];
   seekTo: (positionMs: number) => Promise<void>;
   setPodcastsVaultRefreshUi: (patch: PodcastsVaultRefreshUiPatch) => void;
+  toggleMiniPlayerArtworkSelection: () => void;
   togglePlayback: () => Promise<void>;
 };
 
@@ -47,6 +51,7 @@ type PlayerProviderProps = {
 
 export function PlayerProvider({children}: PlayerProviderProps) {
   const {baseUri} = useVaultContext();
+  const [miniPlayerArtworkSelected, setMiniPlayerArtworkSelected] = useState(false);
   const [podcastsVaultRefreshVisible, setPodcastsVaultRefreshVisible] = useState(false);
   const [podcastsVaultRefreshPercent, setPodcastsVaultRefreshPercent] = useState<
     number | null
@@ -66,6 +71,7 @@ export function PlayerProvider({children}: PlayerProviderProps) {
 
   const {
     allEpisodes,
+    catalogReady: podcastsCatalogReady,
     error: podcastError,
     isLoading: podcastsLoading,
     refresh: refreshPodcasts,
@@ -100,36 +106,59 @@ export function PlayerProvider({children}: PlayerProviderProps) {
     seekTo,
     state: playbackState,
     togglePlayback,
-  } = usePlayer(episodesById, {onMarkAsPlayed: handleMarkEpisodeAsPlayed});
+  } = usePlayer(episodesById, {
+    onMarkAsPlayed: handleMarkEpisodeAsPlayed,
+    podcastsCatalogReady,
+    podcastsLoading,
+  });
+
+  const toggleMiniPlayerArtworkSelection = useCallback(() => {
+    setMiniPlayerArtworkSelected(previous => !previous);
+  }, []);
+
+  const clearMiniPlayerArtworkSelection = useCallback(() => {
+    setMiniPlayerArtworkSelected(false);
+  }, []);
+
+  useEffect(() => {
+    if (!activeEpisode) {
+      setMiniPlayerArtworkSelected(false);
+    }
+  }, [activeEpisode]);
 
   const value = useMemo(
     () => ({
       activeEpisode,
       allEpisodes,
+      clearMiniPlayerArtworkSelection,
+      markEpisodeAsPlayed: handleMarkEpisodeAsPlayed,
+      miniPlayerArtworkSelected,
+      playEpisode,
       playbackError,
       playbackLoading,
       playbackState,
-      markEpisodeAsPlayed: handleMarkEpisodeAsPlayed,
-      playEpisode,
-      progress,
       podcastError,
       podcastsLoading,
       podcastsVaultRefreshPercent,
       podcastsVaultRefreshVisible,
+      progress,
       refreshPodcasts,
       sections,
       seekTo,
       setPodcastsVaultRefreshUi,
+      toggleMiniPlayerArtworkSelection,
       togglePlayback,
     }),
     [
       activeEpisode,
       allEpisodes,
+      clearMiniPlayerArtworkSelection,
+      handleMarkEpisodeAsPlayed,
+      miniPlayerArtworkSelected,
+      playEpisode,
       playbackError,
       playbackLoading,
       playbackState,
-      handleMarkEpisodeAsPlayed,
-      playEpisode,
       podcastError,
       podcastsLoading,
       podcastsVaultRefreshPercent,
@@ -139,6 +168,7 @@ export function PlayerProvider({children}: PlayerProviderProps) {
       sections,
       seekTo,
       setPodcastsVaultRefreshUi,
+      toggleMiniPlayerArtworkSelection,
       togglePlayback,
     ],
   );

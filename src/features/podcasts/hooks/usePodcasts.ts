@@ -39,6 +39,7 @@ function backgroundGeneralReconcileDelayMs(): number {
 
 type UsePodcastsResult = {
   allEpisodes: PodcastEpisode[];
+  catalogReady: boolean;
   error: string | null;
   isLoading: boolean;
   refresh: (options?: RefreshPodcastsOptions) => Promise<void>;
@@ -48,14 +49,20 @@ type UsePodcastsResult = {
 export function usePodcasts(): UsePodcastsResult {
   const {baseUri} = useVaultContext();
   const [allEpisodes, setAllEpisodes] = useState<PodcastEpisode[]>([]);
+  const [catalogReady, setCatalogReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sections, setSections] = useState<PodcastSection[]>([]);
+
+  useEffect(() => {
+    setCatalogReady(false);
+  }, [baseUri]);
 
   const refresh = useCallback(
     async (options?: RefreshPodcastsOptions) => {
       if (!baseUri) {
         setAllEpisodes([]);
+        setCatalogReady(false);
         setSections([]);
         return;
       }
@@ -148,6 +155,7 @@ export function usePodcasts(): UsePodcastsResult {
         setAllEpisodes([]);
         setSections([]);
       } finally {
+        setCatalogReady(true);
         setIsLoading(false);
       }
 
@@ -187,6 +195,7 @@ export function usePodcasts(): UsePodcastsResult {
 
   return {
     allEpisodes,
+    catalogReady,
     error,
     isLoading,
     refresh,

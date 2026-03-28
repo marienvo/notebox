@@ -1,18 +1,26 @@
 import {Box, Pressable, Text, useColorMode} from '@gluestack-ui/themed';
+import Slider from '@react-native-community/slider';
+import {useCallback, useState} from 'react';
 import {StyleSheet, View} from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
+import {ACCENT_COLOR} from '../../../core/ui/accentColor';
+import {formatRelativeCalendarLabelFromIsoDate} from '../../../core/utils/relativeCalendarLabel';
 import {useVaultContext} from '../../../core/vault/VaultContext';
 import {usePlayerContext} from '../context/PlayerContext';
 import {PodcastArtworkImage} from './PodcastArtworkImage';
 import {usePodcastArtwork} from '../hooks/usePodcastArtwork';
+
+const SKIP_MS = 10_000;
+const SKIP_ICON_SIZE = 34;
+const PLAY_ICON_SIZE = 52;
 
 /**
  * Approximate total height when MiniPlayer is visible. Used for keyboard footer offset;
  * update if container padding, artwork row, or progress block changes.
  */
 export const MINI_PLAYER_LAYOUT_HEIGHT =
-  1 + 10 + 40 + 8 + 4 + 6 + 16 + 10;
+  1 + 20 + 64 + 8 + 40 + 18 + 8 + 48 + 20;
 
 function formatProgress(positionMs: number, durationMs: number | null): string {
   const safePosition = Math.max(0, Math.floor(positionMs / 1000));
@@ -36,13 +44,31 @@ function formatProgress(positionMs: number, durationMs: number | null): string {
   return `${minutes}:${seconds} / ${totalMinutes}:${totalSeconds}`;
 }
 
+function clampSeekMs(
+  positionMs: number,
+  durationMs: number | null,
+  deltaMs: number,
+): number {
+  const next = positionMs + deltaMs;
+  if (next < 0) {
+    return 0;
+  }
+  if (durationMs != null && durationMs > 0) {
+    return Math.min(durationMs, next);
+  }
+  return next;
+}
+
 export function MiniPlayer() {
   const {baseUri} = useVaultContext();
   const {
     activeEpisode,
+    miniPlayerArtworkSelected,
     playbackLoading,
     playbackState,
     progress,
+    seekTo,
+    toggleMiniPlayerArtworkSelection,
     togglePlayback,
   } = usePlayerContext();
   const colorMode = useColorMode();
@@ -50,20 +76,43 @@ export function MiniPlayer() {
     allowBackgroundFetch: true,
   });
 
+  const [sliderDragging, setSliderDragging] = useState(false);
+  const [sliderDragMs, setSliderDragMs] = useState(0);
+
+  const handleSeekBy = useCallback(
+    (deltaMs: number) => {
+      if (!activeEpisode) {
+        return;
+      }
+      const next = clampSeekMs(progress.positionMs, progress.durationMs, deltaMs);
+      seekTo(next).catch(() => undefined);
+    },
+    [activeEpisode, progress.durationMs, progress.positionMs, seekTo],
+  );
+
+  const onSliderComplete = useCallback(
+    (valueMs: number) => {
+      setSliderDragging(false);
+      seekTo(valueMs).catch(() => undefined);
+    },
+    [seekTo],
+  );
+
   if (!activeEpisode) {
     return null;
   }
 
   const isPlaying = playbackState === 'playing';
-  const progressRatio =
-    progress.durationMs && progress.durationMs > 0
-      ? Math.min(progress.positionMs / progress.durationMs, 1)
-      : 0;
+  const durationMs = progress.durationMs ?? 0;
+  const sliderMaxMs =
+    durationMs > 0 ? durationMs : Math.max(progress.positionMs, 1);
+  const sliderValueMs = sliderDragging ? sliderDragMs : progress.positionMs;
+
   const backgroundColor = colorMode === 'dark' ? '#1f1f1f' : '#ffffff';
   const borderColor = colorMode === 'dark' ? '#3f3f3f' : '#d7d7d7';
-  const progressColor = colorMode === 'dark' ? '#7dc4ff' : '#0d6efd';
   const progressTrackColor = colorMode === 'dark' ? '#383838' : '#ebebeb';
   const mutedTextColor = colorMode === 'dark' ? '#c8c8c8' : '#616161';
+  const artworkBorderColor = miniPlayerArtworkSelected ? ACCENT_COLOR : 'transparent';
 
   return (
     <Box
@@ -75,19 +124,61 @@ export function MiniPlayer() {
         },
       ]}>
       <View style={styles.topRow}>
-        <PodcastArtworkImage
-          artworkUri={artworkUri}
-          imageStyle={styles.artwork}
-          placeholderStyle={styles.artworkPlaceholder}
-        />
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            toggleMiniPlayerArtworkSelection();
+          }}
+          style={[styles.artworkPressable, {borderColor: artworkBorderColor}]}>
+          <PodcastArtworkImage
+            artworkUri={artworkUri}
+            imageStyle={styles.artwork}
+            placeholderStyle={styles.artworkPlaceholder}
+          />
+        </Pressable>
         <View style={styles.textWrap}>
-          <Text numberOfLines={1} style={styles.title}>
+          <Text ellipsizeMode="tail" numberOfLines={1} style={styles.title}>
             {activeEpisode.title}
           </Text>
           <Text numberOfLines={1} style={[styles.subtitle, {color: mutedTextColor}]}>
             {activeEpisode.seriesName}
           </Text>
+          <Text numberOfLines={1} style={[styles.dateLine, {color: mutedTextColor}]}>
+            {formatRelativeCalendarLabelFromIsoDate(activeEpisode.date)}
+          </Text>
         </View>
+      </View>
+      <Slider
+        maximumTrackTintColor={progressTrackColor}
+        maximumValue={sliderMaxMs}
+        minimumTrackTintColor={ACCENT_COLOR}
+        minimumValue={0}
+        onSlidingComplete={onSliderComplete}
+        onSlidingStart={() => {
+          setSliderDragging(true);
+          setSliderDragMs(progress.positionMs);
+        }}
+        onValueChange={value => {
+          setSliderDragMs(value);
+        }}
+        style={styles.slider}
+        thumbTintColor={ACCENT_COLOR}
+        value={Math.min(sliderValueMs, sliderMaxMs)}
+      />
+      <Text style={[styles.progressText, {color: mutedTextColor}]}>
+        {formatProgress(progress.positionMs, progress.durationMs)}
+      </Text>
+      <View style={styles.transportRow}>
+        <Pressable
+          accessibilityLabel="Rewind 10 seconds"
+          disabled={playbackLoading}
+          hitSlop={8}
+          onPress={() => {
+            handleSeekBy(-SKIP_MS);
+          }}
+          style={styles.skipButton}>
+          <MaterialIcons color={mutedTextColor} name="replay-10" size={SKIP_ICON_SIZE} />
+        </Pressable>
         <Pressable
           disabled={playbackLoading}
           onPress={() => {
@@ -97,24 +188,20 @@ export function MiniPlayer() {
           <MaterialIcons
             color={mutedTextColor}
             name={isPlaying ? 'pause-circle-filled' : 'play-circle-filled'}
-            size={34}
+            size={PLAY_ICON_SIZE}
           />
         </Pressable>
+        <Pressable
+          accessibilityLabel="Forward 10 seconds"
+          disabled={playbackLoading}
+          hitSlop={8}
+          onPress={() => {
+            handleSeekBy(SKIP_MS);
+          }}
+          style={styles.skipButton}>
+          <MaterialIcons color={mutedTextColor} name="forward-10" size={SKIP_ICON_SIZE} />
+        </Pressable>
       </View>
-      <View style={[styles.progressTrack, {backgroundColor: progressTrackColor}]}>
-        <View
-          style={[
-            styles.progressFill,
-            {
-              backgroundColor: progressColor,
-              width: `${progressRatio * 100}%`,
-            },
-          ]}
-        />
-      </View>
-      <Text style={[styles.progressText, {color: mutedTextColor}]}>
-        {formatProgress(progress.positionMs, progress.durationMs)}
-      </Text>
     </Box>
   );
 }
@@ -122,41 +209,48 @@ export function MiniPlayer() {
 const styles = StyleSheet.create({
   artwork: {
     borderRadius: 8,
-    height: 40,
-    marginRight: 10,
-    width: 40,
+    height: 64,
+    width: 64,
   },
   artworkPlaceholder: {
     alignItems: 'center',
     backgroundColor: '#e2e2e2',
     borderRadius: 8,
-    height: 40,
+    height: 64,
     justifyContent: 'center',
+    width: 64,
+  },
+  artworkPressable: {
+    borderRadius: 10,
+    borderWidth: 2,
     marginRight: 10,
-    width: 40,
   },
   container: {
     borderTopWidth: 1,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
+  dateLine: {
+    fontSize: 11,
+    marginTop: 2,
+  },
   playButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 12,
-  },
-  progressFill: {
-    height: 4,
+    marginHorizontal: 8,
   },
   progressText: {
     fontSize: 12,
-    marginTop: 6,
+    marginTop: 2,
   },
-  progressTrack: {
-    borderRadius: 100,
-    height: 4,
+  skipButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 44,
+  },
+  slider: {
+    height: 40,
     marginTop: 8,
-    overflow: 'hidden',
     width: '100%',
   },
   subtitle: {
@@ -165,6 +259,7 @@ const styles = StyleSheet.create({
   },
   textWrap: {
     flex: 1,
+    minWidth: 0,
   },
   title: {
     fontSize: 14,
@@ -173,5 +268,11 @@ const styles = StyleSheet.create({
   topRow: {
     alignItems: 'center',
     flexDirection: 'row',
+  },
+  transportRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 6,
   },
 });

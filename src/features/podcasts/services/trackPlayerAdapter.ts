@@ -97,6 +97,11 @@ export class TrackPlayerAdapter implements AudioPlayer {
     await TrackPlayer.seekTo(toSeconds(positionMs));
   }
 
+  public async stop(): Promise<void> {
+    await this.ensureSetup();
+    await TrackPlayer.reset();
+  }
+
   public async getProgress(): Promise<PlayerProgress> {
     await this.ensureSetup();
     const progress = await TrackPlayer.getProgress();
