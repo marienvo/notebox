@@ -3,7 +3,6 @@ import {StackScreenProps} from '@react-navigation/stack';
 import {useFocusEffect} from '@react-navigation/native';
 import {useCallback, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {
-  Platform,
   RefreshControl,
   SectionList,
   StyleSheet,
@@ -321,13 +320,12 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
         contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl
-            colors={Platform.OS === 'android' ? ['transparent'] : undefined}
             onRefresh={() => {
               handlePodcastsPullRefresh().catch(() => undefined);
             }}
-            progressBackgroundColor={Platform.OS === 'android' ? '#00000000' : undefined}
-            refreshing={pullRefreshInProgress || podcastsLoading}
-            tintColor={Platform.OS === 'ios' ? 'transparent' : undefined}
+            // Keep false while work runs: pull affordance matches Inbox (default colors); after
+            // release, header strip carries progress so the list needs no floating spinner.
+            refreshing={false}
           />
         }
         sections={sectionData}
