@@ -2,9 +2,81 @@
 /** Set before any test file so app code can skip long deferred timers without relying on inlined env. */
 global.__NOTEBOX_JEST__ = true;
 
+/**
+ * Do not use `react-native-reanimated/mock`: it imports the real `index`, which pulls in native
+ * worklets and breaks Jest. This stub covers app usage (startup splash + Podcasts header strip).
+ */
 jest.mock('react-native-reanimated', () => {
-  const Reanimated = require('react-native-reanimated/mock');
-  return Reanimated;
+  const ReactNative = require('react-native');
+  const NOOP = () => {};
+  const ID = t => t;
+  const {View, Text, Image} = ReactNative;
+  const {Animated: AnimatedRN} = ReactNative;
+
+  const useSharedValue = init => {
+    const target = {value: init};
+    return new Proxy(target, {
+      get(tr, prop) {
+        if (prop === 'value') {
+          return tr.value;
+        }
+        if (prop === 'get') {
+          return () => tr.value;
+        }
+        if (prop === 'set') {
+          return v => {
+            tr.value = typeof v === 'function' ? v(tr.value) : v;
+          };
+        }
+      },
+      set(tr, prop, v) {
+        if (prop === 'value') {
+          tr.value = v;
+          return true;
+        }
+        return false;
+      },
+    });
+  };
+
+  return {
+    __esModule: true,
+    cancelAnimation: NOOP,
+    default: {
+      View,
+      Text,
+      Image,
+      ScrollView: AnimatedRN.ScrollView,
+      FlatList: AnimatedRN.FlatList,
+      createAnimatedComponent: ID,
+    },
+    Easing: {
+      linear: ID,
+      ease: ID,
+      cubic: ID,
+      inOut: f => f,
+      out: f => f,
+    },
+    runOnJS: ID,
+    runOnUI: ID,
+    useAnimatedStyle: fn => (typeof fn === 'function' ? fn() : {}),
+    useFrameCallback: () => ({
+      callbackId: 0,
+      isActive: false,
+      setActive: jest.fn(),
+    }),
+    useReducedMotion: () => false,
+    useSharedValue,
+    withRepeat: ID,
+    withSpring: (to, _cfg, cb) => {
+      cb?.(true);
+      return to;
+    },
+    withTiming: (to, _cfg, cb) => {
+      cb?.(true);
+      return to;
+    },
+  };
 });
 
 jest.mock('react-native-keyboard-controller', () => {

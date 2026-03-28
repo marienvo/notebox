@@ -11,6 +11,7 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 import {PlaylistScreen} from '../features/inbox/screens/PlaylistScreen';
 import {MiniPlayer} from '../features/podcasts/components/MiniPlayer';
+import {RecordScreen} from '../features/record/screens/RecordScreen';
 import {PodcastsTabHeader} from '../features/podcasts/components/PodcastsTabHeader';
 import {PlayerProvider} from '../features/podcasts/context/PlayerContext';
 import {PodcastsScreen} from '../features/podcasts/screens/PodcastsScreen';
@@ -23,6 +24,7 @@ import {
   MainTabParamList,
   PlaylistStackParamList,
   PodcastsStackParamList,
+  RecordStackParamList,
   SettingsStackParamList,
   VaultStackParamList,
 } from './types';
@@ -32,21 +34,23 @@ const PlaylistStack = createStackNavigator<PlaylistStackParamList>();
 const PodcastsStack = createStackNavigator<PodcastsStackParamList>();
 const AddNoteStack = createStackNavigator<AddNoteStackParamList>();
 const VaultStack = createStackNavigator<VaultStackParamList>();
+const RecordStack = createStackNavigator<RecordStackParamList>();
 const SettingsStack = createStackNavigator<SettingsStackParamList>();
 const playlistTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
   <MaterialIcons color={color} name="playlist-play" size={size} />
 );
 const newNoteTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
-  <MaterialIcons color={color} name="add-box" size={size} />
+  <MaterialIcons color={color} name="add" size={size} />
 );
 const inboxTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
-  <MaterialIcons color={color} name="move-to-inbox" size={size} />
+  <MaterialIcons color={color} name="notes" size={size} />
 );
 const podcastsTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
-  <MaterialIcons color={color} name="headphones" size={size} />
+  <MaterialIcons color={color} name="radio" size={size} />
 );
-const settingsTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
-  <MaterialIcons color={color} name="settings" size={size} />
+const RECORD_TAB_ICON_COLOR = '#e53935';
+const recordTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({size}) => (
+  <MaterialIcons color={RECORD_TAB_ICON_COLOR} name="fiber-manual-record" size={size} />
 );
 const tabBarButton: BottomTabNavigationOptions['tabBarButton'] = props => (
   <TabBarButton {...props} />
@@ -136,7 +140,7 @@ function VaultStackScreen() {
           headerStyle: styles.tabHeader,
           headerTintColor: '#ffffff',
           headerTitleStyle: styles.tabHeaderTitle,
-          title: route.params?.noteUri ? 'Edit note' : 'New note',
+          title: route.params?.noteUri ? 'Edit entry' : 'New entry',
         })}
       />
       <VaultStack.Screen
@@ -145,6 +149,14 @@ function VaultStackScreen() {
         options={{headerShown: false}}
       />
     </VaultStack.Navigator>
+  );
+}
+
+function RecordStackScreen() {
+  return (
+    <RecordStack.Navigator screenOptions={{headerShown: false}}>
+      <RecordStack.Screen component={RecordScreen} name="Record" />
+    </RecordStack.Navigator>
   );
 }
 
@@ -160,7 +172,7 @@ export function MainTabNavigator() {
   return (
     <PlayerProvider>
       <Tabs.Navigator
-        initialRouteName="VaultTab"
+        initialRouteName="PodcastsTab"
         screenOptions={{
           headerShown: true,
           headerStyle: styles.tabHeader,
@@ -180,7 +192,7 @@ export function MainTabNavigator() {
             header: renderPodcastsTabHeader,
             tabBarButton,
             tabBarIcon: podcastsTabIcon,
-            title: 'Podcasts',
+            title: 'Episodes',
           }}
         />
         <Tabs.Screen
@@ -198,7 +210,7 @@ export function MainTabNavigator() {
           options={{
             tabBarButton,
             tabBarIcon: inboxTabIcon,
-            title: 'Inbox',
+            title: 'Log',
           }}
         />
         <Tabs.Screen
@@ -207,15 +219,26 @@ export function MainTabNavigator() {
           options={{
             tabBarButton,
             tabBarIcon: newNoteTabIcon,
-            title: 'Note',
+            title: 'Entry',
+          }}
+        />
+        <Tabs.Screen
+          component={RecordStackScreen}
+          name="RecordTab"
+          options={{
+            tabBarAccessibilityLabel: 'Record',
+            tabBarButton,
+            tabBarIcon: recordTabIcon,
+            tabBarLabel: 'Record',
+            title: 'Record',
           }}
         />
         <Tabs.Screen
           component={SettingsStackScreen}
           name="SettingsTab"
           options={{
-            tabBarButton,
-            tabBarIcon: settingsTabIcon,
+            tabBarButton: () => null,
+            tabBarItemStyle: {display: 'none'},
             title: 'Settings',
           }}
         />

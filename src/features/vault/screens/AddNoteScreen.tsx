@@ -87,7 +87,7 @@ function applyVaultComposeHeaders(stackNavigation: AddNoteNavigation, editMode: 
   tabNavigation.setOptions({headerShown: false});
   stackNavigation.setOptions({
     headerShown: true,
-    title: editMode ? 'Edit note' : 'New note',
+    title: editMode ? 'Edit entry' : 'New entry',
   });
 }
 
@@ -129,7 +129,7 @@ export function AddNoteScreen({navigation, route}: AddNoteScreenProps) {
         if (!isActive) {
           return;
         }
-        setStatusText('Could not load this note.');
+        setStatusText('Could not load this entry.');
         setIsLoadingEdit(false);
       });
 
@@ -159,7 +159,7 @@ export function AddNoteScreen({navigation, route}: AddNoteScreenProps) {
           headerBackVisible: false,
           headerLeft: () => null,
           headerShown: true,
-          headerTitle: isEdit ? 'Edit note' : 'Note',
+          headerTitle: isEdit ? 'Edit entry' : 'New entry',
         });
       };
 
@@ -170,7 +170,7 @@ export function AddNoteScreen({navigation, route}: AddNoteScreenProps) {
           headerBackVisible: undefined,
           headerLeft: undefined,
           headerShown: true,
-          headerTitle: 'Note',
+          headerTitle: 'New entry',
         });
       };
     }
@@ -178,7 +178,7 @@ export function AddNoteScreen({navigation, route}: AddNoteScreenProps) {
     const showVaultTabHeader = () => {
       tabNavigation.setOptions({
         headerShown: true,
-        headerTitle: 'Inbox',
+        headerTitle: 'Log',
       });
     };
 
@@ -232,7 +232,7 @@ export function AddNoteScreen({navigation, route}: AddNoteScreenProps) {
             headerBackVisible: false,
             headerLeft: () => null,
             headerShown: true,
-            headerTitle: isEdit ? 'Edit note' : 'Note',
+            headerTitle: isEdit ? 'Edit entry' : 'New entry',
           });
         }
       }
@@ -352,7 +352,7 @@ export function AddNoteScreen({navigation, route}: AddNoteScreenProps) {
                 <Text style={[styles.actionLabel, {color: inputTextColor}]}>Cancel</Text>
               </Pressable>
               <Pressable
-                accessibilityLabel={isSaving ? 'Saving note' : 'Save note'}
+                accessibilityLabel={isSaving ? 'Saving entry' : 'Save entry'}
                 accessibilityRole="button"
                 disabled={isSaving}
                 onPress={onPressSave}

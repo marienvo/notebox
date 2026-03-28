@@ -1,5 +1,6 @@
-import {StackScreenProps} from '@react-navigation/stack';
+import type {NavigationProp} from '@react-navigation/native';
 import {useFocusEffect} from '@react-navigation/native';
+import {StackScreenProps} from '@react-navigation/stack';
 import {useCallback, useLayoutEffect, useRef, useState} from 'react';
 import {
   Box,
@@ -27,7 +28,7 @@ import {extractFirstMarkdownH1} from '../../../core/utils/extractFirstMarkdownH1
 import {formatRelativeCalendarLabel} from '../../../core/utils/relativeCalendarLabel';
 import {useVaultContext} from '../../../core/vault/VaultContext';
 import {getInboxTileBackgroundColor} from '../utils/inboxTileColor';
-import {VaultStackParamList} from '../../../navigation/types';
+import {MainTabParamList, VaultStackParamList} from '../../../navigation/types';
 import {useNotes} from '../hooks/useNotes';
 
 type VaultScreenProps = StackScreenProps<VaultStackParamList, 'Vault'>;
@@ -80,15 +81,17 @@ export function VaultScreen({navigation}: VaultScreenProps) {
     [],
   );
 
-  const renderAddHeaderRight = useCallback(
+  const renderSettingsHeaderRight = useCallback(
     () => (
       <TouchableOpacity
+        accessibilityLabel="Settings"
         hitSlop={{bottom: 8, left: 8, right: 8, top: 8}}
         onPress={() => {
-          navigation.navigate('AddNote');
+          const tabNavigation = navigation.getParent<NavigationProp<MainTabParamList>>();
+          tabNavigation?.navigate('SettingsTab');
         }}
-        style={styles.headerAddButton}>
-        <MaterialIcons color="#ffffff" name="add-box" size={24} />
+        style={styles.headerIconButton}>
+        <MaterialIcons color="#ffffff" name="settings" size={24} />
       </TouchableOpacity>
     ),
     [navigation],
@@ -125,7 +128,7 @@ export function VaultScreen({navigation}: VaultScreenProps) {
       await deleteNotes(selectedUris);
       setSelectedNoteUris(new Set());
     } catch (deleteNotesError) {
-      const fallbackMessage = 'Could not delete selected notes.';
+      const fallbackMessage = 'Could not delete selected entries.';
       setDeleteError(
         deleteNotesError instanceof Error ? deleteNotesError.message : fallbackMessage,
       );
@@ -143,7 +146,7 @@ export function VaultScreen({navigation}: VaultScreenProps) {
         onPress={() => {
           handleDeleteSelected().catch(() => undefined);
         }}
-        style={styles.headerAddButton}>
+        style={styles.headerIconButton}>
         {isDeleting ? (
           <Spinner size="small" />
         ) : (
@@ -166,8 +169,8 @@ export function VaultScreen({navigation}: VaultScreenProps) {
     if (!hasSelection) {
       tabNavigation.setOptions({
         headerLeft: undefined,
-        headerRight: renderAddHeaderRight,
-        headerTitle: 'Inbox',
+        headerRight: renderSettingsHeaderRight,
+        headerTitle: 'Log',
       });
       return;
     }
@@ -182,14 +185,14 @@ export function VaultScreen({navigation}: VaultScreenProps) {
       tabNavigation.setOptions({
         headerLeft: undefined,
         headerRight: undefined,
-        headerTitle: 'Inbox',
+        headerTitle: 'Log',
       });
     };
   }, [
     hasSelection,
     isVaultTopRoute,
     navigation,
-    renderAddHeaderRight,
+    renderSettingsHeaderRight,
     renderSelectionHeaderLeft,
     renderSelectionHeaderRight,
     selectedCount,
@@ -209,8 +212,8 @@ export function VaultScreen({navigation}: VaultScreenProps) {
         tabNavigation.setOptions({
           headerShown: true,
           headerLeft: hasSelection ? renderSelectionHeaderLeft : undefined,
-          headerRight: hasSelection ? renderSelectionHeaderRight : renderAddHeaderRight,
-          headerTitle: hasSelection ? `${selectedCount} selected` : 'Inbox',
+          headerRight: hasSelection ? renderSelectionHeaderRight : renderSettingsHeaderRight,
+          headerTitle: hasSelection ? `${selectedCount} selected` : 'Log',
         });
       };
 
@@ -223,7 +226,7 @@ export function VaultScreen({navigation}: VaultScreenProps) {
       hasSelection,
       isVaultTopRoute,
       navigation,
-      renderAddHeaderRight,
+      renderSettingsHeaderRight,
       renderSelectionHeaderLeft,
       renderSelectionHeaderRight,
       selectedCount,
@@ -298,7 +301,7 @@ export function VaultScreen({navigation}: VaultScreenProps) {
         ListEmptyComponent={
           !isLoading ? (
             <Text style={styles.status}>
-              No markdown notes found in Inbox. Add one with + or the Note tab.
+              No markdown entries found in Log. Add one via the Entry tab.
             </Text>
           ) : null
         }
@@ -354,7 +357,7 @@ const styles = StyleSheet.create({
   headerBackButton: {
     marginLeft: 12,
   },
-  headerAddButton: {
+  headerIconButton: {
     marginRight: 12,
   },
   spinner: {

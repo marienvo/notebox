@@ -45,7 +45,7 @@ export function SetupScreen() {
       await saveUri(selectedDirectory.uri);
       await initNotebox(selectedDirectory.uri);
       await setSessionUri(selectedDirectory.uri);
-      navigation.replace('MainTabs', {screen: 'VaultTab'});
+      navigation.replace('MainTabs', {screen: 'PodcastsTab'});
     } catch (error) {
       const fallbackMessage =
         'Could not save this directory. Please try again.';
@@ -59,7 +59,7 @@ export function SetupScreen() {
     <Box style={styles.container}>
       <Text style={styles.title}>Set up Notebox</Text>
       <Text style={styles.description}>
-        Choose the directory where Notebox can store app settings and notes.
+        Choose the directory where Notebox can store app settings and entries.
       </Text>
       {!isAndroid ? (
         <Text style={styles.statusText}>
@@ -73,7 +73,7 @@ export function SetupScreen() {
           onPress={handleChooseDirectory}
           size="md">
           {isSubmitting ? <ButtonSpinner /> : null}
-          <ButtonText>Choose Notes Directory</ButtonText>
+          <ButtonText>Choose Entries Directory</ButtonText>
         </Button>
       </Box>
       {isSubmitting ? <ButtonSpinner style={styles.spinner} /> : null}

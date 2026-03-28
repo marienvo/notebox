@@ -124,7 +124,7 @@ export function NotesProvider({children}: NotesProviderProps) {
         const nextNotes = await listInboxNotesAndSyncIndex(baseUri);
         setNotes(nextNotes);
       } catch (loadError) {
-        const fallbackMessage = 'Could not load notes from Vault.';
+        const fallbackMessage = 'Could not load entries from Vault.';
         setError(loadError instanceof Error ? loadError.message : fallbackMessage);
       } finally {
         if (!isSilent) {
@@ -142,7 +142,7 @@ export function NotesProvider({children}: NotesProviderProps) {
   const create = useCallback(
     async (title: string, content: string) => {
       if (!baseUri) {
-        throw new Error('No notes directory selected.');
+        throw new Error('No vault directory selected.');
       }
 
       const occupiedInboxMarkdownNames = new Set(notes.map(note => note.name));
@@ -184,7 +184,7 @@ export function NotesProvider({children}: NotesProviderProps) {
   const deleteNotes = useCallback(
     async (noteUris: string[]) => {
       if (!baseUri) {
-        throw new Error('No notes directory selected.');
+        throw new Error('No vault directory selected.');
       }
 
       if (noteUris.length === 0) {
@@ -197,7 +197,7 @@ export function NotesProvider({children}: NotesProviderProps) {
 
       if (canonicalNotes.length !== noteUris.length) {
         throw new Error(
-          'Could not delete selected notes because one or more notes are no longer available. Refresh Vault and try again.',
+          'Could not delete selected entries because one or more entries are no longer available. Refresh Vault and try again.',
         );
       }
 

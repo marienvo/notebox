@@ -20,7 +20,7 @@ function noteFileNameFromRoute(route: NoteDetailScreenProps['route']): string {
     return route.params.noteFileName.trim();
   }
   const tail = normalizeNoteUri(route.params.noteUri).split('/').filter(Boolean).pop();
-  return tail ?? 'Note';
+  return tail ?? 'Entry';
 }
 
 type NoteDetailEditHeaderButtonProps = {
@@ -30,7 +30,7 @@ type NoteDetailEditHeaderButtonProps = {
 function NoteDetailEditHeaderButton({onPress}: NoteDetailEditHeaderButtonProps) {
   return (
     <Pressable
-      accessibilityLabel="Edit note"
+      accessibilityLabel="Edit entry"
       accessibilityRole="button"
       hitSlop={{bottom: 8, left: 8, right: 8, top: 8}}
       onPress={onPress}
@@ -104,7 +104,7 @@ export function NoteDetailScreen({navigation, route}: NoteDetailScreenProps) {
       tabNavigation.setOptions({
         headerShown: true,
         headerLeft: undefined,
-        headerTitle: 'Inbox',
+        headerTitle: 'Log',
       });
     };
 
@@ -209,7 +209,7 @@ export function NoteDetailScreen({navigation, route}: NoteDetailScreenProps) {
             return;
           }
 
-          const fallbackMessage = 'Could not load this note.';
+          const fallbackMessage = 'Could not load this entry.';
           setError(loadError instanceof Error ? loadError.message : fallbackMessage);
         } finally {
           if (isActive && !silentReload) {
@@ -241,7 +241,7 @@ export function NoteDetailScreen({navigation, route}: NoteDetailScreenProps) {
               link: {color: '#4f9dff'},
               paragraph: {color: markdownTextColor},
             }}>
-            {content || '*Empty note*'}
+            {content || '*Empty entry*'}
           </Markdown>
         </ScrollView>
       ) : null}

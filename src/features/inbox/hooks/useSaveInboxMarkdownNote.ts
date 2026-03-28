@@ -24,7 +24,7 @@ export function useSaveInboxMarkdownNote() {
       }
 
       if (!trimmedContent) {
-        setStatusText('Note content is required.');
+        setStatusText('Entry content is required.');
         return false;
       }
 
@@ -40,7 +40,7 @@ export function useSaveInboxMarkdownNote() {
         }
         return true;
       } catch (error) {
-        const fallbackMessage = 'Could not save this note.';
+        const fallbackMessage = 'Could not save this entry.';
         setStatusText(error instanceof Error ? error.message : fallbackMessage);
         return false;
       } finally {

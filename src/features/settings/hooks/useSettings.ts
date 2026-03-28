@@ -12,7 +12,7 @@ export function useSettings() {
   const saveSettings = useCallback(
     async (nextSettings: NoteboxSettings) => {
       if (!baseUri) {
-        throw new Error('No notes directory selected.');
+        throw new Error('No vault directory selected.');
       }
 
       setIsSaving(true);

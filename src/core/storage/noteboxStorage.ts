@@ -135,7 +135,7 @@ function stemFromMarkdownFileName(fileName: string): string {
 function titleFromNoteName(fileName: string): string {
   const baseName = stemFromMarkdownFileName(fileName);
 
-  return baseName.replace(/[-_]+/g, ' ').trim() || 'Untitled note';
+  return baseName.replace(/[-_]+/g, ' ').trim() || 'Untitled entry';
 }
 
 /** Builds the full body for `General/Inbox.md` from Inbox markdown basenames (e.g. `note.md`). */
@@ -560,7 +560,7 @@ export async function deleteInboxNotes(
   for (const noteUri of noteUris) {
     const normalizedNoteUri = normalizeNoteUri(noteUri);
     if (!isNoteUriInInbox(normalizedNoteUri, normalizedBaseUri)) {
-      throw new Error('Could not verify that the selected note belongs to Inbox.');
+      throw new Error('Could not verify that the selected entry belongs to Log.');
     }
     await unlink(normalizedNoteUri);
   }
