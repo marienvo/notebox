@@ -11,6 +11,7 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 import {PlaylistScreen} from '../features/inbox/screens/PlaylistScreen';
 import {MiniPlayer} from '../features/podcasts/components/MiniPlayer';
+import {RecordScreen} from '../features/record/screens/RecordScreen';
 import {PodcastsTabHeader} from '../features/podcasts/components/PodcastsTabHeader';
 import {PlayerProvider} from '../features/podcasts/context/PlayerContext';
 import {PodcastsScreen} from '../features/podcasts/screens/PodcastsScreen';
@@ -23,6 +24,7 @@ import {
   MainTabParamList,
   PlaylistStackParamList,
   PodcastsStackParamList,
+  RecordStackParamList,
   SettingsStackParamList,
   VaultStackParamList,
 } from './types';
@@ -32,6 +34,7 @@ const PlaylistStack = createStackNavigator<PlaylistStackParamList>();
 const PodcastsStack = createStackNavigator<PodcastsStackParamList>();
 const AddNoteStack = createStackNavigator<AddNoteStackParamList>();
 const VaultStack = createStackNavigator<VaultStackParamList>();
+const RecordStack = createStackNavigator<RecordStackParamList>();
 const SettingsStack = createStackNavigator<SettingsStackParamList>();
 const playlistTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
   <MaterialIcons color={color} name="playlist-play" size={size} />
@@ -45,8 +48,9 @@ const inboxTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) =
 const podcastsTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
   <MaterialIcons color={color} name="headphones" size={size} />
 );
-const settingsTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({color, size}) => (
-  <MaterialIcons color={color} name="settings" size={size} />
+const RECORD_TAB_ICON_COLOR = '#e53935';
+const recordTabIcon: BottomTabNavigationOptions['tabBarIcon'] = ({size}) => (
+  <MaterialIcons color={RECORD_TAB_ICON_COLOR} name="fiber-manual-record" size={size} />
 );
 const tabBarButton: BottomTabNavigationOptions['tabBarButton'] = props => (
   <TabBarButton {...props} />
@@ -148,6 +152,14 @@ function VaultStackScreen() {
   );
 }
 
+function RecordStackScreen() {
+  return (
+    <RecordStack.Navigator screenOptions={{headerShown: false}}>
+      <RecordStack.Screen component={RecordScreen} name="Record" />
+    </RecordStack.Navigator>
+  );
+}
+
 function SettingsStackScreen() {
   return (
     <SettingsStack.Navigator screenOptions={{headerShown: false}}>
@@ -211,11 +223,21 @@ export function MainTabNavigator() {
           }}
         />
         <Tabs.Screen
+          component={RecordStackScreen}
+          name="RecordTab"
+          options={{
+            tabBarAccessibilityLabel: 'Record',
+            tabBarButton,
+            tabBarIcon: recordTabIcon,
+            tabBarLabel: () => null,
+            title: '',
+          }}
+        />
+        <Tabs.Screen
           component={SettingsStackScreen}
           name="SettingsTab"
           options={{
-            tabBarButton,
-            tabBarIcon: settingsTabIcon,
+            tabBarButton: () => null,
             title: 'Settings',
           }}
         />

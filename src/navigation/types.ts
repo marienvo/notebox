@@ -9,6 +9,7 @@ export type MainTabParamList = {
   AddNoteTab: NavigatorScreenParams<AddNoteStackParamList> | undefined;
   PlaylistTab: NavigatorScreenParams<PlaylistStackParamList> | undefined;
   PodcastsTab: NavigatorScreenParams<PodcastsStackParamList> | undefined;
+  RecordTab: NavigatorScreenParams<RecordStackParamList> | undefined;
   SettingsTab: NavigatorScreenParams<SettingsStackParamList> | undefined;
   VaultTab: NavigatorScreenParams<VaultStackParamList> | undefined;
 };
@@ -23,6 +24,10 @@ export type PlaylistStackParamList = {
 
 export type PodcastsStackParamList = {
   Podcasts: undefined;
+};
+
+export type RecordStackParamList = {
+  Record: undefined;
 };
 
 export type VaultStackParamList = {
