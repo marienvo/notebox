@@ -192,7 +192,7 @@ export function MainTabNavigator() {
             header: renderPodcastsTabHeader,
             tabBarButton,
             tabBarIcon: podcastsTabIcon,
-            title: 'Podcasts',
+            title: 'Episodes',
           }}
         />
         <Tabs.Screen

@@ -284,7 +284,7 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
       tabNavigation.setOptions({
         headerLeft: undefined,
         headerRight: undefined,
-        headerTitle: 'Podcasts',
+        headerTitle: 'Episodes',
       });
       return;
     }
@@ -292,14 +292,14 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
     tabNavigation.setOptions({
       headerLeft: hasSelection ? renderSelectionHeaderLeft : undefined,
       headerRight: renderSelectionHeaderRight,
-      headerTitle: hasSelection ? `${selectedCount} selected` : 'Podcasts',
+      headerTitle: hasSelection ? `${selectedCount} selected` : 'Episodes',
     });
 
     return () => {
       tabNavigation.setOptions({
         headerLeft: undefined,
         headerRight: undefined,
-        headerTitle: 'Podcasts',
+        headerTitle: 'Episodes',
       });
     };
   }, [
@@ -327,7 +327,7 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
           headerShown: true,
           headerLeft: hasSelection ? renderSelectionHeaderLeft : undefined,
           headerRight: isPodcastsHeaderSelectionMode ? renderSelectionHeaderRight : undefined,
-          headerTitle: hasSelection ? `${selectedCount} selected` : 'Podcasts',
+          headerTitle: hasSelection ? `${selectedCount} selected` : 'Episodes',
         });
       };
 

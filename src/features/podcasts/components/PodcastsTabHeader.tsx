@@ -17,7 +17,7 @@ import {usePlayerContext} from '../context/PlayerContext';
 const STRIP_HEIGHT = 3;
 const SEGMENT_FRACTION = 0.38;
 
-/** Tab header for Podcasts: default Header plus vault-refresh progress strip. */
+/** Tab header for Episodes: default Header plus vault-refresh progress strip. */
 export function PodcastsTabHeader({layout, options, route}: BottomTabHeaderProps) {
   const {podcastsVaultRefreshPercent, podcastsVaultRefreshVisible} = usePlayerContext();
 
