@@ -20,28 +20,17 @@ const PLAY_ICON_SIZE = 52;
  * update if container padding, artwork row, or progress block changes.
  */
 export const MINI_PLAYER_LAYOUT_HEIGHT =
-  1 + 20 + 64 + 8 + 40 + 18 + 8 + 48 + 20;
+  1 + 20 + 64 + 8 + 40 + 6 + 52 + 20;
 
-function formatProgress(positionMs: number, durationMs: number | null): string {
-  const safePosition = Math.max(0, Math.floor(positionMs / 1000));
-  const safeDuration =
-    durationMs === null ? null : Math.max(0, Math.floor(durationMs / 1000));
+const MS_PER_SECOND = 1000;
 
-  const minutes = Math.floor(safePosition / 60)
+function formatClockFromMs(ms: number): string {
+  const safe = Math.max(0, Math.floor(ms / MS_PER_SECOND));
+  const minutes = Math.floor(safe / 60)
     .toString()
     .padStart(2, '0');
-  const seconds = (safePosition % 60).toString().padStart(2, '0');
-
-  if (safeDuration === null) {
-    return `${minutes}:${seconds}`;
-  }
-
-  const totalMinutes = Math.floor(safeDuration / 60)
-    .toString()
-    .padStart(2, '0');
-  const totalSeconds = (safeDuration % 60).toString().padStart(2, '0');
-
-  return `${minutes}:${seconds} / ${totalMinutes}:${totalSeconds}`;
+  const seconds = (safe % 60).toString().padStart(2, '0');
+  return `${minutes}:${seconds}`;
 }
 
 function clampSeekMs(
@@ -113,6 +102,11 @@ export function MiniPlayer() {
   const progressTrackColor = colorMode === 'dark' ? '#383838' : '#ebebeb';
   const mutedTextColor = colorMode === 'dark' ? '#c8c8c8' : '#616161';
   const artworkBorderColor = miniPlayerArtworkSelected ? ACCENT_COLOR : 'transparent';
+  const elapsedLabel = formatClockFromMs(sliderValueMs);
+  const durationLabel =
+    progress.durationMs != null && progress.durationMs > 0
+      ? formatClockFromMs(progress.durationMs)
+      : '\u2014';
 
   return (
     <Box
@@ -165,42 +159,45 @@ export function MiniPlayer() {
         thumbTintColor={ACCENT_COLOR}
         value={Math.min(sliderValueMs, sliderMaxMs)}
       />
-      <Text style={[styles.progressText, {color: mutedTextColor}]}>
-        {formatProgress(progress.positionMs, progress.durationMs)}
-      </Text>
       <View style={styles.transportRow}>
-        <Pressable
-          accessibilityLabel="Rewind 10 seconds"
-          disabled={playbackLoading}
-          hitSlop={8}
-          onPress={() => {
-            handleSeekBy(-SKIP_MS);
-          }}
-          style={styles.skipButton}>
-          <MaterialIcons color={mutedTextColor} name="replay-10" size={SKIP_ICON_SIZE} />
-        </Pressable>
-        <Pressable
-          disabled={playbackLoading}
-          onPress={() => {
-            togglePlayback().catch(() => undefined);
-          }}
-          style={styles.playButton}>
-          <MaterialIcons
-            color={mutedTextColor}
-            name={isPlaying ? 'pause-circle-filled' : 'play-circle-filled'}
-            size={PLAY_ICON_SIZE}
-          />
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Forward 10 seconds"
-          disabled={playbackLoading}
-          hitSlop={8}
-          onPress={() => {
-            handleSeekBy(SKIP_MS);
-          }}
-          style={styles.skipButton}>
-          <MaterialIcons color={mutedTextColor} name="forward-10" size={SKIP_ICON_SIZE} />
-        </Pressable>
+        <Text style={[styles.transportTime, {color: mutedTextColor}]}>{elapsedLabel}</Text>
+        <View style={styles.transportCenter}>
+          <Pressable
+            accessibilityLabel="Rewind 10 seconds"
+            disabled={playbackLoading}
+            hitSlop={8}
+            onPress={() => {
+              handleSeekBy(-SKIP_MS);
+            }}
+            style={styles.skipButton}>
+            <MaterialIcons color={mutedTextColor} name="replay-10" size={SKIP_ICON_SIZE} />
+          </Pressable>
+          <Pressable
+            disabled={playbackLoading}
+            onPress={() => {
+              togglePlayback().catch(() => undefined);
+            }}
+            style={styles.playButton}>
+            <MaterialIcons
+              color={mutedTextColor}
+              name={isPlaying ? 'pause-circle-filled' : 'play-circle-filled'}
+              size={PLAY_ICON_SIZE}
+            />
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Forward 10 seconds"
+            disabled={playbackLoading}
+            hitSlop={8}
+            onPress={() => {
+              handleSeekBy(SKIP_MS);
+            }}
+            style={styles.skipButton}>
+            <MaterialIcons color={mutedTextColor} name="forward-10" size={SKIP_ICON_SIZE} />
+          </Pressable>
+        </View>
+        <Text style={[styles.transportTime, styles.transportTimeEnd, {color: mutedTextColor}]}>
+          {durationLabel}
+        </Text>
       </View>
     </Box>
   );
@@ -239,10 +236,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginHorizontal: 8,
   },
-  progressText: {
-    fontSize: 12,
-    marginTop: 2,
-  },
   skipButton: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -269,10 +262,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
   },
+  transportCenter: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexShrink: 0,
+    justifyContent: 'center',
+  },
   transportRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 6,
+    marginTop: 2,
+    minHeight: PLAY_ICON_SIZE,
+  },
+  transportTime: {
+    flex: 1,
+    fontSize: 12,
+    fontVariant: ['tabular-nums'],
+  },
+  transportTimeEnd: {
+    textAlign: 'right',
   },
 });

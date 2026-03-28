@@ -17,10 +17,12 @@ const MIN_PERSIST_POSITION_MS = 10_000;
 
 type UsePlayerResult = {
   activeEpisode: PodcastEpisode | null;
+  clearNowPlayingIfMatchesEpisode: (episodeId: string) => Promise<void>;
   error: string | null;
   isLoading: boolean;
   playEpisode: (episode: PodcastEpisode) => Promise<void>;
   progress: PlayerProgress;
+  resyncPlaylistFromDisk: () => Promise<void>;
   seekTo: (positionMs: number) => Promise<void>;
   state: PlayerState;
   togglePlayback: () => Promise<void>;
@@ -64,7 +66,12 @@ export function usePlayer(
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState<PlayerProgress>(emptyProgress);
   const [savedPlaylistEntry, setSavedPlaylistEntry] = useState<PlaylistEntry | null>(null);
+  const savedPlaylistEntryRef = useRef<PlaylistEntry | null>(null);
   const [state, setState] = useState<PlayerState>('idle');
+
+  useEffect(() => {
+    savedPlaylistEntryRef.current = savedPlaylistEntry;
+  }, [savedPlaylistEntry]);
 
   useEffect(() => {
     activeEpisodeRef.current = activeEpisode;
@@ -319,12 +326,65 @@ export function usePlayer(
     [player],
   );
 
+  const clearNowPlayingIfMatchesEpisode = useCallback(
+    async (episodeId: string) => {
+      const uri = baseUriRef.current;
+      const matchesActive = activeEpisodeRef.current?.id === episodeId;
+      const matchesSaved = savedPlaylistEntryRef.current?.episodeId === episodeId;
+      if (!matchesActive && !matchesSaved) {
+        return;
+      }
+
+      setSavedPlaylistEntry(null);
+      setActiveEpisode(null);
+      setProgress(emptyProgress);
+      setState('idle');
+      loadedEpisodeIdRef.current = null;
+
+      if (!uri) {
+        return;
+      }
+
+      try {
+        await player.stop();
+        await clearPlaylist(uri);
+      } catch (cleanupError) {
+        const fallbackMessage = 'Could not clear playlist after marking as played.';
+        setError(cleanupError instanceof Error ? cleanupError.message : fallbackMessage);
+      }
+    },
+    [player],
+  );
+
+  const resyncPlaylistFromDisk = useCallback(async () => {
+    const uri = baseUriRef.current;
+    if (!uri) {
+      setSavedPlaylistEntry(null);
+      setActiveEpisode(null);
+      setProgress(emptyProgress);
+      setState('idle');
+      loadedEpisodeIdRef.current = null;
+      return;
+    }
+
+    try {
+      await player.ensureSetup();
+      const saved = await readPlaylistCoalesced(uri);
+      setSavedPlaylistEntry(saved);
+    } catch (resyncError) {
+      const fallbackMessage = 'Could not restore player state.';
+      setError(resyncError instanceof Error ? resyncError.message : fallbackMessage);
+    }
+  }, [player]);
+
   return {
     activeEpisode,
+    clearNowPlayingIfMatchesEpisode,
     error,
     isLoading,
     playEpisode,
     progress,
+    resyncPlaylistFromDisk,
     seekTo,
     state,
     togglePlayback,

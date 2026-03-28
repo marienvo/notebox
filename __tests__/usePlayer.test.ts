@@ -64,6 +64,80 @@ function HookHarness({
   return null;
 }
 
+type ClearSnapshotHarnessProps = {
+  episodesById: Map<string, PodcastEpisode>;
+  onClearReady: (
+    clearNowPlayingIfMatchesEpisode: (episodeId: string) => Promise<void>,
+  ) => void;
+  onSnapshot: (snapshot: PlayerHookSnapshot) => void;
+};
+
+function ClearSnapshotHarness({
+  episodesById,
+  onClearReady,
+  onSnapshot,
+}: ClearSnapshotHarnessProps) {
+  const result = usePlayer(episodesById, {
+    onMarkAsPlayed: async () => undefined,
+    podcastsCatalogReady: true,
+    podcastsLoading: false,
+  });
+
+  useEffect(() => {
+    onClearReady(result.clearNowPlayingIfMatchesEpisode);
+  }, [onClearReady, result.clearNowPlayingIfMatchesEpisode]);
+
+  useEffect(() => {
+    onSnapshot({
+      activeEpisode: result.activeEpisode,
+      progress: result.progress,
+      state: result.state,
+    });
+  }, [onSnapshot, result.activeEpisode, result.progress, result.state]);
+
+  return null;
+}
+
+type ClearHarnessProps = {
+  episodesById: Map<string, PodcastEpisode>;
+  onClearReady: (
+    clearNowPlayingIfMatchesEpisode: (episodeId: string) => Promise<void>,
+  ) => void;
+};
+
+function ClearHarness({episodesById, onClearReady}: ClearHarnessProps) {
+  const result = usePlayer(episodesById, {
+    onMarkAsPlayed: async () => undefined,
+    podcastsCatalogReady: true,
+    podcastsLoading: false,
+  });
+
+  useEffect(() => {
+    onClearReady(result.clearNowPlayingIfMatchesEpisode);
+  }, [onClearReady, result.clearNowPlayingIfMatchesEpisode]);
+
+  return null;
+}
+
+type ResyncHarnessProps = {
+  episodesById: Map<string, PodcastEpisode>;
+  onResyncReady: (resyncPlaylistFromDisk: () => Promise<void>) => void;
+};
+
+function ResyncHarness({episodesById, onResyncReady}: ResyncHarnessProps) {
+  const result = usePlayer(episodesById, {
+    onMarkAsPlayed: async () => undefined,
+    podcastsCatalogReady: true,
+    podcastsLoading: false,
+  });
+
+  useEffect(() => {
+    onResyncReady(result.resyncPlaylistFromDisk);
+  }, [onResyncReady, result.resyncPlaylistFromDisk]);
+
+  return null;
+}
+
 type SeekHarnessProps = {
   episodesById: Map<string, PodcastEpisode>;
   onSeekTo: (seekTo: (ms: number) => Promise<void>) => void;
@@ -346,5 +420,128 @@ describe('usePlayer restore state', () => {
     });
 
     expect(writePlaylistMock).not.toHaveBeenCalled();
+  });
+
+  test('clearNowPlayingIfMatchesEpisode stops playback and clears playlist when id matches', async () => {
+    readPlaylistMock.mockResolvedValue({
+      durationMs: 900000,
+      episodeId: episode.id,
+      mp3Url: episode.mp3Url,
+      positionMs: 123456,
+    });
+
+    const episodesById = new Map([[episode.id, episode]]);
+    let clearFn: ((episodeId: string) => Promise<void>) | null = null;
+    let latestResult: PlayerHookSnapshot | null = null;
+
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(ClearSnapshotHarness, {
+          episodesById,
+          onClearReady: fn => {
+            clearFn = fn;
+          },
+          onSnapshot: snapshot => {
+            latestResult = snapshot;
+          },
+        }),
+      );
+      await flushPromises();
+    });
+
+    if (!clearFn) {
+      throw new Error('clearNowPlayingIfMatchesEpisode not wired.');
+    }
+
+    expect(expectResult(latestResult).activeEpisode).toEqual(episode);
+
+    await act(async () => {
+      await clearFn!(episode.id);
+    });
+
+    expect(stopMock).toHaveBeenCalled();
+    expect(clearPlaylistMock).toHaveBeenCalledWith('content://vault-root');
+    expect(expectResult(latestResult).activeEpisode).toBeNull();
+  });
+
+  test('clearNowPlayingIfMatchesEpisode no-ops when id does not match playlist or active', async () => {
+    readPlaylistMock.mockResolvedValue({
+      durationMs: 900000,
+      episodeId: episode.id,
+      mp3Url: episode.mp3Url,
+      positionMs: 123456,
+    });
+
+    const episodesById = new Map([[episode.id, episode]]);
+    let clearFn: ((episodeId: string) => Promise<void>) | null = null;
+
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(ClearHarness, {
+          episodesById,
+          onClearReady: fn => {
+            clearFn = fn;
+          },
+        }),
+      );
+      await flushPromises();
+    });
+
+    if (!clearFn) {
+      throw new Error('clearNowPlayingIfMatchesEpisode not wired.');
+    }
+
+    clearPlaylistMock.mockClear();
+    stopMock.mockClear();
+
+    await act(async () => {
+      await clearFn!('https://other.example/episode.mp3');
+    });
+
+    expect(stopMock).not.toHaveBeenCalled();
+    expect(clearPlaylistMock).not.toHaveBeenCalled();
+  });
+
+  test('resyncPlaylistFromDisk reads playlist from storage again', async () => {
+    readPlaylistMock.mockResolvedValueOnce({
+      durationMs: 120_000,
+      episodeId: episode.id,
+      mp3Url: episode.mp3Url,
+      positionMs: 0,
+    });
+
+    const episodesById = new Map([[episode.id, episode]]);
+    let resyncFn: (() => Promise<void>) | null = null;
+
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(ResyncHarness, {
+          episodesById,
+          onResyncReady: fn => {
+            resyncFn = fn;
+          },
+        }),
+      );
+      await flushPromises();
+    });
+
+    readPlaylistMock.mockResolvedValueOnce({
+      durationMs: 200_000,
+      episodeId: episode.id,
+      mp3Url: episode.mp3Url,
+      positionMs: 50_000,
+    });
+
+    if (!resyncFn) {
+      throw new Error('resyncPlaylistFromDisk not wired.');
+    }
+
+    await act(async () => {
+      await resyncFn!();
+      await flushPromises();
+    });
+
+    expect(readPlaylistMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(ensureSetupMock.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });

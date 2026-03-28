@@ -175,7 +175,6 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
     setIsMarkingArtwork(true);
     try {
       await markEpisodeAsPlayed(activeEpisode);
-      clearMiniPlayerArtworkSelection();
     } catch (markEpisodeError) {
       const fallbackMessage = 'Could not mark episode as played.';
       setMarkError(
@@ -185,7 +184,7 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
       markInFlightRef.current = false;
       setIsMarkingArtwork(false);
     }
-  }, [activeEpisode, clearMiniPlayerArtworkSelection, isMarkingArtwork, markEpisodeAsPlayed]);
+  }, [activeEpisode, isMarkingArtwork, markEpisodeAsPlayed]);
 
   const handleMarkSelectedAsPlayed = useCallback(async () => {
     if (markInFlightRef.current || isMarkingBatch || !baseUri) {
@@ -232,17 +231,13 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
         hitSlop={{bottom: 8, left: 8, right: 8, top: 8}}
         onPress={() => {
           setMarkError(null);
-          if (hasSelection) {
-            setSelectedEpisodeIds(new Set());
-          } else if (miniPlayerArtworkSelected) {
-            clearMiniPlayerArtworkSelection();
-          }
+          setSelectedEpisodeIds(new Set());
         }}
         style={styles.headerBackButton}>
         <MaterialIcons color="#ffffff" name="arrow-back" size={22} />
       </TouchableOpacity>
     ),
-    [clearMiniPlayerArtworkSelection, hasSelection, miniPlayerArtworkSelected],
+    [],
   );
 
   const renderSelectionHeaderRight = useCallback(
@@ -295,7 +290,7 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
     }
 
     tabNavigation.setOptions({
-      headerLeft: renderSelectionHeaderLeft,
+      headerLeft: hasSelection ? renderSelectionHeaderLeft : undefined,
       headerRight: renderSelectionHeaderRight,
       headerTitle: hasSelection ? `${selectedCount} selected` : 'Podcasts',
     });
@@ -330,7 +325,7 @@ export function PodcastsScreen({navigation}: PodcastsScreenProps) {
         }
         tabNavigation.setOptions({
           headerShown: true,
-          headerLeft: isPodcastsHeaderSelectionMode ? renderSelectionHeaderLeft : undefined,
+          headerLeft: hasSelection ? renderSelectionHeaderLeft : undefined,
           headerRight: isPodcastsHeaderSelectionMode ? renderSelectionHeaderRight : undefined,
           headerTitle: hasSelection ? `${selectedCount} selected` : 'Podcasts',
         });

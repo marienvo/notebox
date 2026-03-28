@@ -17,6 +17,7 @@ import {
 import {takePodcastBootstrapPayload} from '../services/podcastBootstrapCache';
 import {
   buildPodcastSectionsFromPodcastMarkdownFiles,
+  createSectionsWithRss,
   primeArtworkForEpisodesAndSections,
   RefreshPodcastsOptions,
   runPodcastPhase1,
@@ -39,6 +40,7 @@ function backgroundGeneralReconcileDelayMs(): number {
 
 type UsePodcastsResult = {
   allEpisodes: PodcastEpisode[];
+  applyOptimisticEpisodePlayed: (episodeId: string) => boolean;
   catalogReady: boolean;
   error: string | null;
   isLoading: boolean;
@@ -193,8 +195,42 @@ export function usePodcasts(): UsePodcastsResult {
     refresh().catch(() => undefined);
   }, [refresh]);
 
+  const applyOptimisticEpisodePlayed = useCallback(
+    (episodeId: string): boolean => {
+      if (!baseUri) {
+        return false;
+      }
+
+      let nextEpisodes: PodcastEpisode[] | null = null;
+      setAllEpisodes(previous => {
+        let changed = false;
+        const next = previous.map(episode => {
+          if (episode.id !== episodeId || episode.isListened) {
+            return episode;
+          }
+          changed = true;
+          return {...episode, isListened: true};
+        });
+
+        if (changed) {
+          nextEpisodes = next;
+          return next;
+        }
+        return previous;
+      });
+
+      if (nextEpisodes) {
+        setSections(createSectionsWithRss(baseUri, nextEpisodes));
+        return true;
+      }
+      return false;
+    },
+    [baseUri],
+  );
+
   return {
     allEpisodes,
+    applyOptimisticEpisodePlayed,
     catalogReady,
     error,
     isLoading,
